@@ -15,6 +15,7 @@ api_url = "https://prolocklogger.pro/api/getuserbyfingerprint/"
 TIME_IN_URL = "https://prolocklogger.pro/api/logs/time-in/fingerprint"
 TIME_OUT_URL = "https://prolocklogger.pro/api/logs/time-out/fingerprint"
 RECENT_LOGS_URL2 = 'https://prolocklogger.pro/api/recent-logs/by-fingerid'
+SCHEDULE_URL = "https://prolocklogger.pro/api/lab-schedules/fingerprint/"
 
 # GPIO pin configuration for the solenoid lock
 SOLENOID_PIN = 17
@@ -90,6 +91,7 @@ def check_time_in_record(fingerprint_id):
     except requests.RequestException as e:
         print(f"Error checking Time-In record: {e}")
         return False
+
 def record_time_in(fingerprint_id, user_name, role_id="2"):
     try:
         url = f"{TIME_IN_URL}?fingerprint_id={fingerprint_id}&time_in={datetime.now().strftime('%H:%M')}&user_name={user_name}&role_id={role_id}"
@@ -116,6 +118,28 @@ def record_time_out(fingerprint_id):
 
     except requests.RequestException as e:
         print(f"Error recording Time-Out: {e}")
+
+def get_schedule(fingerprint_id):
+    try:
+        response = requests.get(f"{SCHEDULE_URL}{fingerprint_id}")
+        if response.status_code == 200:
+            schedules = response.json()
+            if schedules:
+                today = datetime.now().strftime('%A')  # Get the current day of the week
+                current_time = datetime.now().strftime('%H:%M')  # Get the current time
+                for schedule in schedules:
+                    if schedule['day_of_the_week'] == today:
+                        start_time = schedule['class_start']
+                        end_time = schedule['class_end']
+                        if start_time <= current_time <= end_time:
+                            return True  # Schedule matches, allow access
+            return False  # No matching schedule or not within allowed time
+        else:
+            messagebox.showerror("API Error", "Failed to fetch schedule from API.")
+            return False
+    except requests.RequestException as e:
+        messagebox.showerror("Request Error", f"Failed to connect to API: {e}")
+        return False
 
 def auto_scan_fingerprint():
     global unlock_attempt
@@ -144,23 +168,27 @@ def auto_scan_fingerprint():
     name = get_user_details(finger.finger_id)
 
     if name:
-        if not check_time_in_record(finger.finger_id):
-            # Record Time-In, unlock door, and transition to RFID scanning
-            record_time_in(finger.finger_id, name)
-            unlock_door()
-            messagebox.showinfo("Welcome", f"Welcome, {name}! Door unlocked.")
-            root.after(1000, run_rfid_script)  # Wait 1 second then run RFID script
+        if get_schedule(finger.finger_id):  # Check if the current time is within the allowed schedule
+            if not check_time_in_record(finger.finger_id):
+                # Record Time-In, unlock door, and transition to RFID scanning
+                record_time_in(finger.finger_id, name)
+                unlock_door()
+                messagebox.showinfo("Welcome", f"Welcome, {name}! Door unlocked.")
+                root.after(1000, run_rfid_script)  # Wait 1 second then run RFID script
+            else:
+                # Record Time-Out and lock door
+                record_time_out(finger.finger_id)
+                lock_door()
+                messagebox.showinfo("Goodbye", f"Goodbye, {name}! Door locked.")
+                root.after(10000, auto_scan_fingerprint)  # Wait 10 seconds then resume scanning
         else:
-            # Record Time-Out and lock door
-            record_time_out(finger.finger_id)
-            lock_door()
-            messagebox.showinfo("Goodbye", f"Goodbye, {name}! Door locked.")
-            root.after(10000, auto_scan_fingerprint)  # Wait 10 seconds then resume scanning
+            messagebox.showinfo("Access Denied", "Access is not allowed outside of scheduled times.")
     else:
         messagebox.showinfo("No Match", "No matching fingerprint found in the database.")
 
 def lock_door_and_resume():
     auto_scan_fingerprint()  # Resume fingerprint scanning without locking the door
+
 def center_widget(parent, widget, width, height, y_offset=0):
     """Center a widget within its parent, optionally with a vertical offset."""
     parent_width = parent.winfo_width()
@@ -204,33 +232,20 @@ image = image.resize((desired_width, desired_height))
 photo = ImageTk.PhotoImage(image)
 image_label = tk.Label(panel, image=photo, bg='#B4CBEF')
 
-# Update the dimensions of widgets after creating them
-root.update_idletasks()
+# Update layout
+y_offset = 20
+y_offset = center_widget(panel, image_label, desired_width, desired_height, y_offset)
+y_offset = center_widget(panel, main_heading, 0, 0, y_offset + 10)
+center_widget(panel, subheading, 0, 0, y_offset + 5)
 
-# Define vertical spacing between widgets
-vertical_spacing = 20  # Space between widgets
+# Start fingerprint scanning
+auto_scan_fingerprint()
 
-# Place widgets sequentially from top to bottom
-current_y = vertical_spacing
+# Properly clean up on exit
+atexit.register(lock_door_and_resume)
 
-current_y = center_widget(panel, main_heading, main_heading.winfo_reqwidth(), main_heading.winfo_reqheight(), current_y)
-current_y += vertical_spacing  # Add spacing below the heading
-
-current_y = center_widget(panel, subheading, subheading.winfo_reqwidth(), subheading.winfo_reqheight(), current_y)
-current_y += vertical_spacing  # Add spacing below the subheading
-
-center_widget(panel, image_label, desired_width, desired_height, current_y)
-
-# Start scanning for fingerprint
-root.after(1000, auto_scan_fingerprint)  # Start the fingerprint scan after 1 second
-
-# Define a cleanup function to ensure GPIO is handled correctly
-def cleanup():
-    # Optionally, you can choose to keep the GPIO state as is
-    print("Cleanup called.")
-
-# Register the cleanup function to be called on exit
-atexit.register(cleanup)
-
-# Run the Tkinter event loop
+# Run the main loop
 root.mainloop()
+
+# Cleanup GPIO on exit
+GPIO.cleanup()
