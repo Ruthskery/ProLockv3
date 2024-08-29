@@ -23,7 +23,6 @@ SOLENOID_PIN = 17
 # Setup GPIO
 GPIO.setmode(GPIO.BCM)
 GPIO.setup(SOLENOID_PIN, GPIO.OUT)
-# Do not set an initial state; it will be adjusted based on solenoid status
 
 # Initialize serial connection
 def initialize_serial():
@@ -49,7 +48,6 @@ def lock_door():
     print("Door locked.")
 
 def run_rfid_script():
-    # Close the current frame and run the RFID script
     root.destroy()  # Close current frame
     subprocess.Popen(["python3", "debug_nfc.py"])  # Run RFID script
 
@@ -106,7 +104,6 @@ def record_time_in(fingerprint_id, user_name, role_id="2"):
 def record_time_out(fingerprint_id):
     """Record the Time-Out event for the given fingerprint ID."""
     try:
-        # Prepare URL with query parameters
         url = f"{TIME_OUT_URL}?fingerprint_id={fingerprint_id}&time_out={datetime.now().strftime('%H:%M')}"
         response = requests.put(url)
         response.raise_for_status()  # Raise an error for bad status codes
@@ -214,6 +211,7 @@ panel_height = 400
 # Create the panel (center it within the root window)
 panel = tk.Frame(root, bg='#B4CBEF')
 panel.place(x=(screen_width - panel_width) // 2, y=(screen_height - panel_height) // 2, width=panel_width, height=panel_height)
+
 # Define custom fonts for headings
 heading_font = font.Font(family="Helvetica", size=20, weight="bold")
 subheading_font = font.Font(family="Helvetica", size=14, weight="normal")
