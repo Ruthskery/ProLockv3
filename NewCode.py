@@ -17,13 +17,15 @@ TIME_OUT_URL = "https://prolocklogger.pro/api/logs/time-out/fingerprint"
 RECENT_LOGS_URL2 = 'https://prolocklogger.pro/api/recent-logs/by-fingerid'
 SCHEDULE_URL = "https://prolocklogger.pro/api/lab-schedules/fingerprint/"
 
-# GPIO pin configuration for the solenoid lock
+# GPIO pin configuration
 SOLENOID_PIN = 17
+BUZZER_PIN = 27
 
 # Setup GPIO
 GPIO.setmode(GPIO.BCM)
 GPIO.setup(SOLENOID_PIN, GPIO.OUT)
-# Do not set an initial state; it will be adjusted based on solenoid status
+GPIO.setup(BUZZER_PIN, GPIO.OUT)
+# Do not set an initial state; it will be adjusted based on solenoid and buzzer status
 
 # Initialize serial connection
 def initialize_serial():
@@ -38,6 +40,7 @@ finger = initialize_serial()
 
 # State variables
 unlock_attempt = True
+unauthorized_attempts = 0
 external_script_process = None
 
 def unlock_door():
@@ -47,6 +50,12 @@ def unlock_door():
 def lock_door():
     GPIO.output(SOLENOID_PIN, GPIO.HIGH)
     print("Door locked.")
+
+def activate_buzzer():
+    GPIO.output(BUZZER_PIN, GPIO.HIGH)
+    time.sleep(3)
+    GPIO.output(BUZZER_PIN, GPIO.LOW)
+    print("Buzzer activated.")
 
 def run_rfid_script():
     # Close the current frame and run the RFID script
@@ -142,7 +151,7 @@ def get_schedule(fingerprint_id):
         return False
 
 def auto_scan_fingerprint():
-    global unlock_attempt
+    global unlock_attempt, unauthorized_attempts
 
     if not finger:
         return
@@ -175,17 +184,27 @@ def auto_scan_fingerprint():
                 unlock_door()
                 messagebox.showinfo("Welcome", f"Welcome, {name}! Door unlocked.")
                 root.after(1000, run_rfid_script)  # Wait 1 second then run RFID script
+                unauthorized_attempts = 0  # Reset unauthorized attempts after successful access
             else:
                 # Record Time-Out and lock door
                 record_time_out(finger.finger_id)
                 lock_door()
                 messagebox.showinfo("Goodbye", f"Goodbye, {name}! Door locked.")
-                root.after(5000, auto_scan_fingerprint)  # Wait 10 seconds then resume scanning
+                root.after(5000, auto_scan_fingerprint)  # Wait 5 seconds then resume scanning
         else:
+            unauthorized_attempts += 1
+            if unauthorized_attempts >= 3:
+                activate_buzzer()  # Activate buzzer on 3 unauthorized attempts
+                unauthorized_attempts = 0  # Reset count after buzzer activation
             messagebox.showinfo("Access Denied", "Access is not allowed outside of scheduled times.")
-            root.after(5000, auto_scan_fingerprint)  # Wait 10 seconds then resume scanning
+            root.after(5000, auto_scan_fingerprint)  # Wait 5 seconds then resume scanning
     else:
+        unauthorized_attempts += 1
+        if unauthorized_attempts >= 3:
+            activate_buzzer()  # Activate buzzer on 3 unauthorized attempts
+            unauthorized_attempts = 0  # Reset count after buzzer activation
         messagebox.showinfo("No Match", "No matching fingerprint found in the database.")
+        root.after(5000, auto_scan_fingerprint)  # Wait 5 seconds then resume scanning
 
 def lock_door_and_resume():
     auto_scan_fingerprint()  # Resume fingerprint scanning without locking the door
@@ -255,7 +274,7 @@ root.after(1000, auto_scan_fingerprint)  # Start the fingerprint scan after 1 se
 
 # Define a cleanup function to ensure GPIO is handled correctly
 def cleanup():
-    # Optionally, you can choose to keep the GPIO state as is
+    GPIO.cleanup()  # Ensure GPIO is properly cleaned up
     print("Cleanup called.")
 
 # Register the cleanup function to be called on exit
