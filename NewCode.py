@@ -25,7 +25,8 @@ BUZZER_PIN = 27
 GPIO.setmode(GPIO.BCM)
 GPIO.setup(SOLENOID_PIN, GPIO.OUT)
 GPIO.setup(BUZZER_PIN, GPIO.OUT)
-# Do not set an initial state; it will be adjusted based on solenoid and buzzer status
+GPIO.output(SOLENOID_PIN, GPIO.HIGH)  # Ensure the door is locked initially
+GPIO.output(BUZZER_PIN, GPIO.LOW)     # Ensure the buzzer is off initially
 
 # Initialize serial connection
 def initialize_serial():
@@ -39,7 +40,6 @@ def initialize_serial():
 finger = initialize_serial()
 
 # State variables
-unlock_attempt = True
 unauthorized_attempts = 0
 external_script_process = None
 
@@ -88,13 +88,10 @@ def check_time_in_record(fingerprint_id):
         response = requests.get(url)
         response.raise_for_status()  # Raise an error for bad status codes
 
-        # Assuming the response is a list of logs
         logs = response.json()
-        
         for log in logs:
             if log.get('time_in') and not log.get('time_out'):
                 return True  # Time-In record exists and Time-Out has not been recorded
-
         return False
 
     except requests.RequestException as e:
@@ -115,18 +112,14 @@ def record_time_in(fingerprint_id, user_name, role_id="2"):
 def record_time_out(fingerprint_id):
     """Record the Time-Out event for the given fingerprint ID."""
     try:
-        # Prepare URL with query parameters
         url = f"{TIME_OUT_URL}?fingerprint_id={fingerprint_id}&time_out={datetime.now().strftime('%H:%M')}"
         response = requests.put(url)
-        response.raise_for_status()  # Raise an error for bad status codes
-
-        # Parse the JSON response
+        response.raise_for_status()
         result = response.json()
         print(result)
-        print("Time-Out recorded successfully.")
-
+        messagebox.showinfo("Success", "Time-Out recorded successfully.")
     except requests.RequestException as e:
-        print(f"Error recording Time-Out: {e}")
+        messagebox.showerror("Error", f"Error recording Time-Out: {e}")
 
 def get_schedule(fingerprint_id):
     try:
@@ -134,15 +127,15 @@ def get_schedule(fingerprint_id):
         if response.status_code == 200:
             schedules = response.json()
             if schedules:
-                today = datetime.now().strftime('%A')  # Get the current day of the week
-                current_time = datetime.now().strftime('%H:%M')  # Get the current time
+                today = datetime.now().strftime('%A')
+                current_time = datetime.now().strftime('%H:%M')
                 for schedule in schedules:
                     if schedule['day_of_the_week'] == today:
                         start_time = schedule['class_start']
                         end_time = schedule['class_end']
                         if start_time <= current_time <= end_time:
-                            return True  # Schedule matches, allow access
-            return False  # No matching schedule or not within allowed time
+                            return True
+            return False
         else:
             messagebox.showerror("API Error", "Failed to fetch schedule from API.")
             return False
@@ -151,7 +144,7 @@ def get_schedule(fingerprint_id):
         return False
 
 def auto_scan_fingerprint():
-    global unlock_attempt, unauthorized_attempts
+    global unauthorized_attempts
 
     if not finger:
         return
@@ -163,52 +156,46 @@ def auto_scan_fingerprint():
     print("Templating...")
     if finger.image_2_tz(1) != adafruit_fingerprint.OK:
         messagebox.showwarning("Error", "Failed to template the fingerprint image.")
-        root.after(5000, auto_scan_fingerprint)  # Retry after 5 seconds
+        root.after(5000, auto_scan_fingerprint)
         return
     print("Searching...")
     if finger.finger_search() != adafruit_fingerprint.OK:
         messagebox.showwarning("Error", "Failed to search for fingerprint match.")
-        root.after(5000, auto_scan_fingerprint)  # Retry after 5 seconds
+        root.after(5000, auto_scan_fingerprint)
         return
 
     print("Detected #", finger.finger_id, "with confidence", finger.confidence)
 
-    # Fetch user details using API
     name = get_user_details(finger.finger_id)
 
     if name:
-        if get_schedule(finger.finger_id):  # Check if the current time is within the allowed schedule
+        if get_schedule(finger.finger_id):
             if not check_time_in_record(finger.finger_id):
-                # Record Time-In, unlock door, and transition to RFID scanning
                 record_time_in(finger.finger_id, name)
                 unlock_door()
                 messagebox.showinfo("Welcome", f"Welcome, {name}! Door unlocked.")
-                root.after(1000, run_rfid_script)  # Wait 1 second then run RFID script
-                unauthorized_attempts = 0  # Reset unauthorized attempts after successful access
+                root.after(1000, run_rfid_script)
+                unauthorized_attempts = 0
             else:
-                # Record Time-Out and lock door
                 record_time_out(finger.finger_id)
                 lock_door()
                 messagebox.showinfo("Goodbye", f"Goodbye, {name}! Door locked.")
-                root.after(5000, auto_scan_fingerprint)  # Wait 5 seconds then resume scanning
+                root.after(5000, auto_scan_fingerprint)
         else:
             unauthorized_attempts += 1
             if unauthorized_attempts >= 3:
-                activate_buzzer()  # Activate buzzer on 3 unauthorized attempts
-                unauthorized_attempts = 0  # Reset count after buzzer activation
+                activate_buzzer()
+                unauthorized_attempts = 0
             messagebox.showinfo("Access Denied", "Access is not allowed outside of scheduled times.")
-            root.after(5000, auto_scan_fingerprint)  # Wait 5 seconds then resume scanning
+            root.after(5000, auto_scan_fingerprint)
     else:
         unauthorized_attempts += 1
         if unauthorized_attempts >= 3:
-            activate_buzzer()  # Activate buzzer on 3 unauthorized attempts
-            unauthorized_attempts = 0  # Reset count after buzzer activation
+            activate_buzzer()
+            unauthorized_attempts = 0
         messagebox.showinfo("No Match", "No matching fingerprint found in the database.")
-        root.after(5000, auto_scan_fingerprint)  # Wait 5 seconds then resume scanning
+        root.after(5000, auto_scan_fingerprint)
 
-def lock_door_and_resume():
-    auto_scan_fingerprint()  # Resume fingerprint scanning without locking the door
-    
 def center_widget(parent, widget, width, height, y_offset=0):
     """Center a widget within its parent, optionally with a vertical offset."""
     parent_width = parent.winfo_width()
@@ -234,6 +221,7 @@ panel_height = 400
 # Create the panel (center it within the root window)
 panel = tk.Frame(root, bg='#B4CBEF')
 panel.place(x=(screen_width - panel_width) // 2, y=(screen_height - panel_height) // 2, width=panel_width, height=panel_height)
+
 # Define custom fonts for headings
 heading_font = font.Font(family="Helvetica", size=20, weight="bold")
 subheading_font = font.Font(family="Helvetica", size=14, weight="normal")
