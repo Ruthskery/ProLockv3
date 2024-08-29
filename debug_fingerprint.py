@@ -8,6 +8,7 @@ import time
 import subprocess
 import requests
 from datetime import datetime
+import atexit
 
 # API URLs
 api_url = "https://prolocklogger.pro/api/getuserbyfingerprint/"
@@ -21,7 +22,7 @@ SOLENOID_PIN = 17
 # Setup GPIO
 GPIO.setmode(GPIO.BCM)
 GPIO.setup(SOLENOID_PIN, GPIO.OUT)
-GPIO.output(SOLENOID_PIN, GPIO.LOW)  # Ensure lock is in default state (locked)
+# Do not set an initial state; it will be adjusted based on solenoid status
 
 # Initialize serial connection
 def initialize_serial():
@@ -39,26 +40,24 @@ unlock_attempt = True
 external_script_process = None
 
 def unlock_door():
-    GPIO.output(SOLENOID_PIN, GPIO.HIGH)
+    GPIO.output(SOLENOID_PIN, GPIO.LOW)
     print("Door unlocked.")
 
 def lock_door():
-    GPIO.output(SOLENOID_PIN, GPIO.LOW)
+    GPIO.output(SOLENOID_PIN, GPIO.HIGH)
     print("Door locked.")
 
-def run_external_script():
-    global external_script_process
-    try:
-        external_script_process = subprocess.Popen(["python3", "debug_nfc.py"])
-        print("External script executed.")
-    except Exception as e:
-        messagebox.showerror("Execution Error", f"Failed to run external script: {e}")
+def run_rfid_script():
+    # Close the current frame and run the RFID script
+    root.destroy()  # Close current frame
+    subprocess.Popen(["python3", "debug_nfc.py"])  # Run RFID script
 
 def terminate_external_script():
     global external_script_process
     if external_script_process:
         external_script_process.terminate()
         print("External script terminated.")
+
 def get_user_details(fingerprint_id):
     try:
         response = requests.get(f"{api_url}{fingerprint_id}")
@@ -81,8 +80,9 @@ def check_time_in_record(fingerprint_id):
 
         # Assuming the response is a list of logs
         logs = response.json()
+        
         for log in logs:
-            if isinstance(log, dict) and log.get('time_in') and not log.get('time_out'):
+            if log.get('time_in') and not log.get('time_out'):
                 return True  # Time-In record exists and Time-Out has not been recorded
 
         return False
@@ -90,7 +90,6 @@ def check_time_in_record(fingerprint_id):
     except requests.RequestException as e:
         print(f"Error checking Time-In record: {e}")
         return False
-
 def record_time_in(fingerprint_id, user_name, role_id="2"):
     try:
         url = f"{TIME_IN_URL}?fingerprint_id={fingerprint_id}&time_in={datetime.now().strftime('%H:%M')}&user_name={user_name}&role_id={role_id}"
@@ -105,11 +104,6 @@ def record_time_in(fingerprint_id, user_name, role_id="2"):
 def record_time_out(fingerprint_id):
     """Record the Time-Out event for the given fingerprint ID."""
     try:
-        # Check if a Time-In record exists for this fingerprint ID
-        if not check_time_in_record(fingerprint_id):
-            print("No Time-In record found for this fingerprint ID. Cannot record Time-Out.")
-            return
-
         # Prepare URL with query parameters
         url = f"{TIME_OUT_URL}?fingerprint_id={fingerprint_id}&time_out={datetime.now().strftime('%H:%M')}"
         response = requests.put(url)
@@ -122,8 +116,8 @@ def record_time_out(fingerprint_id):
 
     except requests.RequestException as e:
         print(f"Error recording Time-Out: {e}")
+
 def auto_scan_fingerprint():
-    """Automatically scan the fingerprint and handle user actions."""
     global unlock_attempt
 
     if not finger:
@@ -145,101 +139,100 @@ def auto_scan_fingerprint():
         return
 
     print("Detected #", finger.finger_id, "with confidence", finger.confidence)
-    
+
     # Fetch user details using API
     name = get_user_details(finger.finger_id)
 
     if name:
-        # Check if there is a Time-In record
-        if check_time_in_record(finger.finger_id):
-            # If Time-In record exists, record Time-Out
-            if unlock_attempt:
-                unlock_door()
-                messagebox.showinfo("Welcome", f"Welcome, {name}! Door unlocked.")
-                
-                # Run external script and wait for 10 seconds
-                run_external_script()
-                # root.after(30000, terminate_external_script)  # Wait 30 seconds then terminate the external script
-                # root.after(30000, lock_door_and_resume)  # Wait 30 seconds then lock the door and resume
-                unlock_attempt = False  # Next scan will lock the door
-            else:
-                record_time_out(finger.finger_id)  # Record Time-Out
-                lock_door()
-                messagebox.showinfo("Goodbye", f"Goodbye, {name}! Door locked.")
-                #run_external_script()
-                # root.after(10000, terminate_external_script)  # Wait 10 seconds then terminate the external script
-                # root.after(10000, lock_door_and_resume)  # Wait 10 seconds then lock the door and resume
-                unlock_attempt = True  # Ready for the next unlock attempt
-        else:
-            # If no Time-In record, record Time-In
+        if not check_time_in_record(finger.finger_id):
+            # Record Time-In, unlock door, and transition to RFID scanning
             record_time_in(finger.finger_id, name)
             unlock_door()
             messagebox.showinfo("Welcome", f"Welcome, {name}! Door unlocked.")
-            
-            # Run external script and wait for 10 seconds
-            run_external_script()
-            root.after(30000, terminate_external_script)  # Wait 30 seconds then terminate the external script
-            root.after(30000, lock_door_and_resume)  # Wait 30 seconds then lock the door and resume
-            unlock_attempt = False  # Next scan will lock the door
+            root.after(1000, run_rfid_script)  # Wait 1 second then run RFID script
+        else:
+            # Record Time-Out and lock door
+            record_time_out(finger.finger_id)
+            lock_door()
+            messagebox.showinfo("Goodbye", f"Goodbye, {name}! Door locked.")
+            root.after(10000, auto_scan_fingerprint)  # Wait 10 seconds then resume scanning
     else:
         messagebox.showinfo("No Match", "No matching fingerprint found in the database.")
 
 def lock_door_and_resume():
-    lock_door()
-    auto_scan_fingerprint()  # Resume fingerprint scanning after locking the door
-
-def center_window(window, width, height):
-    """Center the window on the screen."""
-    screen_width = window.winfo_screenwidth()
-    screen_height = window.winfo_screenheight()
-
-    # Calculate the x and y coordinates for the window to be centered
-    x = (screen_width // 2) - (width // 2)
-    y = (screen_height // 2) - (height // 2)
-
-    # Set the window geometry
-    window.geometry(f'{width}x{height}+{x}+{y}')
+    auto_scan_fingerprint()  # Resume fingerprint scanning without locking the door
+def center_widget(parent, widget, width, height, y_offset=0):
+    """Center a widget within its parent, optionally with a vertical offset."""
+    parent_width = parent.winfo_width()
+    x = (parent_width - width) // 2
+    y = y_offset
+    widget.place(x=x, y=y)
+    return y + height
 
 # Initialize the main window
 root = tk.Tk()
 root.configure(bg='#f0f0f0')
 root.title("Fingerprint Scanning")
 
+# Fit the root window to the screen resolution
+screen_width = root.winfo_screenwidth()
+screen_height = root.winfo_screenheight()
+root.geometry(f"{screen_width}x{screen_height}")
+
+# Set panel dimensions
+panel_width = 600
+panel_height = 400
+
+# Create the panel (center it within the root window)
+panel = tk.Frame(root, bg='#B4CBEF')
+panel.place(x=(screen_width - panel_width) // 2, y=(screen_height - panel_height) // 2, width=panel_width, height=panel_height)
 # Define custom fonts for headings
 heading_font = font.Font(family="Helvetica", size=20, weight="bold")
 subheading_font = font.Font(family="Helvetica", size=14, weight="normal")
 
-# Create the main heading
-main_heading = tk.Label(root, text="Fingerprint Scanning", font=heading_font, bg='#f0f0f0')
-main_heading.place(x=110, y=30)
-
-# Create the subheading
-subheading = tk.Label(root, text="Faculty Fingerprint", font=subheading_font, bg='#f0f0f0')
-subheading.place(x=170, y=80)
+# Create widgets
+main_heading = tk.Label(panel, text="Fingerprint Scanning", font=heading_font, bg='#B4CBEF')
+subheading = tk.Label(panel, text="Faculty Fingerprint", font=subheading_font, bg='#B4CBEF')
 
 # Load and resize an image
 image_path = "fingericon.png"  # Replace with your image file path
-desired_width = 200  # Set your desired width
-desired_height = 180  # Set your desired height
+desired_width = 200
+desired_height = 180
 
-# Open the image file
 image = Image.open(image_path)
-
-# Resize the image
 image = image.resize((desired_width, desired_height))
 photo = ImageTk.PhotoImage(image)
-image_label = tk.Label(root, image=photo, bg='#f0f0f0')
-image_label.place(x=150, y=140)
+image_label = tk.Label(panel, image=photo, bg='#B4CBEF')
 
-# Center the window
-center_window(root, 500, 400)
+# Update the dimensions of widgets after creating them
+root.update_idletasks()
+
+# Define vertical spacing between widgets
+vertical_spacing = 20  # Space between widgets
+
+# Place widgets sequentially from top to bottom
+current_y = vertical_spacing
+
+current_y = center_widget(panel, main_heading, main_heading.winfo_reqwidth(), main_heading.winfo_reqheight(), current_y)
+current_y += vertical_spacing  # Add spacing below the heading
+
+current_y = center_widget(panel, subheading, subheading.winfo_reqwidth(), subheading.winfo_reqheight(), current_y)
+current_y += vertical_spacing  # Add spacing below the subheading
+
+center_widget(panel, image_label, desired_width, desired_height, current_y)
 
 # Start scanning for fingerprint
 root.after(1000, auto_scan_fingerprint)  # Start the fingerprint scan after 1 second
 
+# Define a cleanup function to ensure GPIO is handled correctly
+def cleanup():
+    # Optionally, you can choose to keep the GPIO state as is
+    print("Cleanup called.")
+
+# Register the cleanup function to be called on exit
+atexit.register(cleanup)
+
 # Run the Tkinter event loop
 root.mainloop()
 
-# Clean up GPIO settings on exit
-GPIO.cleanup()
 
