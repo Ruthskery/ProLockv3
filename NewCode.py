@@ -180,15 +180,16 @@ def auto_scan_fingerprint():
                 record_time_out(finger.finger_id)
                 lock_door()
                 messagebox.showinfo("Goodbye", f"Goodbye, {name}! Door locked.")
-                root.after(10000, auto_scan_fingerprint)  # Wait 10 seconds then resume scanning
+                root.after(5000, auto_scan_fingerprint)  # Wait 10 seconds then resume scanning
         else:
             messagebox.showinfo("Access Denied", "Access is not allowed outside of scheduled times.")
+            root.after(5000, auto_scan_fingerprint)  # Wait 10 seconds then resume scanning
     else:
         messagebox.showinfo("No Match", "No matching fingerprint found in the database.")
 
 def lock_door_and_resume():
     auto_scan_fingerprint()  # Resume fingerprint scanning without locking the door
-
+    
 def center_widget(parent, widget, width, height, y_offset=0):
     """Center a widget within its parent, optionally with a vertical offset."""
     parent_width = parent.winfo_width()
@@ -232,20 +233,33 @@ image = image.resize((desired_width, desired_height))
 photo = ImageTk.PhotoImage(image)
 image_label = tk.Label(panel, image=photo, bg='#B4CBEF')
 
-# Update layout
-y_offset = 20
-y_offset = center_widget(panel, image_label, desired_width, desired_height, y_offset)
-y_offset = center_widget(panel, main_heading, 0, 0, y_offset + 10)
-center_widget(panel, subheading, 0, 0, y_offset + 5)
+# Update the dimensions of widgets after creating them
+root.update_idletasks()
 
-# Start fingerprint scanning
-auto_scan_fingerprint()
+# Define vertical spacing between widgets
+vertical_spacing = 20  # Space between widgets
 
-# Properly clean up on exit
-atexit.register(lock_door_and_resume)
+# Place widgets sequentially from top to bottom
+current_y = vertical_spacing
 
-# Run the main loop
+current_y = center_widget(panel, main_heading, main_heading.winfo_reqwidth(), main_heading.winfo_reqheight(), current_y)
+current_y += vertical_spacing  # Add spacing below the heading
+
+current_y = center_widget(panel, subheading, subheading.winfo_reqwidth(), subheading.winfo_reqheight(), current_y)
+current_y += vertical_spacing  # Add spacing below the subheading
+
+center_widget(panel, image_label, desired_width, desired_height, current_y)
+
+# Start scanning for fingerprint
+root.after(1000, auto_scan_fingerprint)  # Start the fingerprint scan after 1 second
+
+# Define a cleanup function to ensure GPIO is handled correctly
+def cleanup():
+    # Optionally, you can choose to keep the GPIO state as is
+    print("Cleanup called.")
+
+# Register the cleanup function to be called on exit
+atexit.register(cleanup)
+
+# Run the Tkinter event loop
 root.mainloop()
-
-# Cleanup GPIO on exit
-GPIO.cleanup()
