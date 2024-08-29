@@ -82,6 +82,7 @@ class AttendanceApp:
         # Initialize NFC reader
         self.clf = nfc.ContactlessFrontend('usb')
         self.running = True
+        self.script_run = False  # Flag to indicate if the script has been run
         self.thread = threading.Thread(target=self.read_nfc_loop)
         self.thread.start()
 
@@ -104,6 +105,12 @@ class AttendanceApp:
                     uid = tag.identifier.hex()
                     self.fetch_user_info(uid)
                     time.sleep(1)
+
+                # Check if the script has been run; if so, terminate the loop
+                if self.script_run:
+                    self.running = False
+                    self.root.quit()  # Terminate the Tkinter main loop
+
             except Exception as e:
                 print(f"Error: {e}")
                 time.sleep(1)
@@ -115,13 +122,11 @@ class AttendanceApp:
             response.raise_for_status()  # Raise an error for bad status codes
             data = response.json()
 
-            # Use 'None' string for None values and handle missing keys gracefully
             user_number = data.get('user_number') or 'None'
             user_name = data.get('user_name') or 'None'
             year = data.get('year') or 'None'
             block = data.get('block') or 'None'
 
-            # Populate the entry fields with data
             self.student_number_entry.delete(0, tk.END)
             self.student_number_entry.insert(0, user_number)
             
@@ -136,18 +141,13 @@ class AttendanceApp:
 
             self.error_label.config(text="")  # Clear any previous error message
 
-            # Check if there's an existing Time-In record
             if self.check_time_in_record(uid):
-                # If there's a Time-In record, record Time-Out
                 self.record_time_out(uid)
             else:
-                # If no Time-In record, record Time-In
                 self.record_time_in(uid, user_name, year)
 
-            # Update records
             self.update_records(uid)
 
-            # Check if all time-ins have corresponding time-outs
             if self.all_time_ins_accounted_for():
                 self.run_external_script()
 
@@ -168,27 +168,24 @@ class AttendanceApp:
 
     def all_time_ins_accounted_for(self):
         return self.time_in_records == self.time_out_records
-    
+
     def run_external_script(self):
         try:
-            subprocess.run(['python', 'debug_fingerprint.py'], check=True)  # Wait for file.py to finish
-            self.root.quit()  # Exit the Tkinter main loop and close the application
-            self.root.destroy()  # Destroy the root window after quitting the main loop
-        except subprocess.CalledProcessError as e:
+            subprocess.Popen(['python', 'debug_fingerprint.py'])
+            self.script_run = True  # Set the flag to True after the script runs
+        except Exception as e:
             self.update_result(f"Error running script: {e}")
-
+            
     def check_time_in_record(self, rfid_number):
         try:
-            # Fetch recent logs to check for an existing Time-In without a Time-Out
             url = f'{RECENT_LOGS_URL2}?rfid_number={rfid_number}'
             response = requests.get(url)
             response.raise_for_status()
 
             logs = response.json()
-            # Check if there's an existing Time-In record for the given RFID
             for log in logs:
                 if log.get('time_in') and not log.get('time_out'):
-                    return True  # Time-In record exists and Time-Out has not been recorded
+                    return True
 
             return False
 
@@ -200,7 +197,7 @@ class AttendanceApp:
         try:
             url = f"{TIME_IN_URL}?rfid_number={rfid_number}&time_in={datetime.now().strftime('%H:%M')}&year={year}&user_name={user_name}&role_id=3"
             response = requests.put(url)
-            response.raise_for_status()  # Raise an error for bad status codes
+            response.raise_for_status()
             result = response.json()
             print(result)
             self.update_result("Time-In recorded successfully.")
@@ -211,15 +208,13 @@ class AttendanceApp:
 
     def record_time_out(self, rfid_number):
         try:
-            # Check if a Time-In record exists for this RFID number
             if not self.check_time_in_record(rfid_number):
                 self.update_result("No Time-In record found for this RFID. Cannot record Time-Out.")
                 return
 
-            # Prepare URL with query parameters
             url = f"{TIME_OUT_URL}?rfid_number={rfid_number}&time_out={datetime.now().strftime('%H:%M')}"
             response = requests.put(url)
-            response.raise_for_status()  # Raise an error for bad status codes
+            response.raise_for_status()
             result = response.json()
             print(result)
             self.update_result("Time-Out recorded successfully.")
@@ -280,3 +275,7 @@ app = AttendanceApp(root)
 
 # Run the application
 root.mainloop()
+
+
+
+
