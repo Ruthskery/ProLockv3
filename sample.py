@@ -29,9 +29,11 @@ def main():
             label.config(text=f"UID Detected: {uid}")
             start_time = time.time()  # Reset the start time on UID detection
         elif time.time() - start_time > 5:  # 5-second timeout
+            print("No UID detected for 5 seconds. Restarting 1.py...")
             root.quit()  # Stop the Tkinter main loop
             root.destroy()  # Destroy the window
-            os.system('python 1.py')  # Restart 1.py
+            result = os.system('python 1.py')  # Restart 1.py
+            print(f"Command result: {result}")  # Print the result of os.system
         else:
             root.after(1000, check_uid)  # Check for UID every 1 second
     
