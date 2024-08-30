@@ -171,24 +171,27 @@ def start_nfc_scanning():
 
 def auto_scan_nfc():
     """Scan for NFC UID using the ACR122U reader."""
-    clf = nfc.ContactlessFrontend('usb')
-    
-    if not clf:
-        messagebox.showerror("NFC Error", "Failed to connect to NFC reader.")
-        return
-
-    def on_connect(tag):
-        print("NFC UID detected:", tag.uid)
-        run_rfid_script()
-        return True  # Stop scanning after detecting the tag
-
     try:
-        clf.connect(rdwr={'on-connect': on_connect})
-    except Exception as e:
-        print(f"Error scanning NFC: {e}")
-    finally:
-        clf.close()
+        clf = nfc.ContactlessFrontend('usb')
+        if not clf:
+            print("Failed to connect to NFC reader.")
+            return
 
+        def on_connect(tag):
+            print("NFC UID detected:", tag.uid)
+            run_rfid_script()
+            return True  # Stop scanning after detecting the tag
+
+        try:
+            clf.connect(rdwr={'on-connect': on_connect})
+        except Exception as e:
+            print(f"Error scanning NFC: {e}")
+        finally:
+            clf.close()
+
+    except Exception as e:
+        print(f"General NFC error: {e}")
+        
 def center_widget(parent, widget, width, height, y_offset=0):
     """Center a widget within its parent, optionally with a vertical offset."""
     parent_width = parent.winfo_width()
