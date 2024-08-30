@@ -25,10 +25,10 @@ def main():
     label.pack(pady=50)
 
     start_time = time.time()  # Track the start time for NFC detection
-    timeout_duration = 5  # Timeout duration in seconds
+    timeout_duration = 10  # Timeout duration in seconds
 
     def on_timeout():
-        print("5 seconds passed. Closing window and restarting 1.py...")
+        print("10 seconds passed. Closing window and restarting 1.py...")
         root.quit()  # Stop the Tkinter main loop
         root.destroy()  # Destroy the window
         os.system('python 1.py')  # Restart 1.py
@@ -41,7 +41,8 @@ def main():
             label.config(text=f"UID Detected: {uid}")
             start_time = time.time()  # Reset the start time on UID detection
             # Restart the timeout countdown
-            root.after_cancel(timeout_timer)  # Cancel any previous timeout timer
+            if 'timeout_timer' in globals():
+                root.after_cancel(timeout_timer)  # Cancel any previous timeout timer
             # Set a new timeout timer
             global timeout_timer
             timeout_timer = root.after(timeout_duration * 1000, on_timeout)
@@ -53,6 +54,7 @@ def main():
                 root.after(1000, check_nfc)  # Check for UID every 1 second
 
     # Initialize timeout timer
+    global timeout_timer
     timeout_timer = root.after(timeout_duration * 1000, on_timeout)
 
     # Start checking for UID after 1 second
