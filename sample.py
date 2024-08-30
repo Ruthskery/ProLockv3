@@ -15,6 +15,8 @@ def detect_uid():
     return None
 
 def main():
+    global timeout_timer  # Declare timeout_timer as global
+
     root = tk.Tk()
     root.title("2.py - NFC UID Detection")
     root.geometry("400x200")
@@ -51,7 +53,6 @@ def main():
                 root.after(1000, check_nfc)  # Check for UID every 1 second
 
     # Initialize timeout timer
-    global timeout_timer
     timeout_timer = root.after(timeout_duration * 1000, on_timeout)
 
     # Start checking for UID after 1 second
