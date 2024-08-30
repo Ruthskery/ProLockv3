@@ -50,6 +50,7 @@ def lock_door():
 def run_rfid_script():
     # Close the current frame and run the RFID script
     root.destroy()  # Close current frame
+    time.sleep(2)  # Add a 2-second delay for proper root.destroy
     subprocess.Popen(["python3", "debug_nfc.py"])  # Run RFID script
 
 def terminate_external_script():
@@ -90,6 +91,7 @@ def check_time_in_record(fingerprint_id):
     except requests.RequestException as e:
         print(f"Error checking Time-In record: {e}")
         return False
+
 def record_time_in(fingerprint_id, user_name, role_id="2"):
     try:
         url = f"{TIME_IN_URL}?fingerprint_id={fingerprint_id}&time_in={datetime.now().strftime('%H:%M')}&user_name={user_name}&role_id={role_id}"
@@ -149,7 +151,7 @@ def auto_scan_fingerprint():
             record_time_in(finger.finger_id, name)
             unlock_door()
             messagebox.showinfo("Welcome", f"Welcome, {name}! Door unlocked.")
-            root.after(1000, run_rfid_script)  # Wait 1 second then run RFID script
+            root.after(1000, auto_scan_nfc)  # Wait 1 second then start NFC scanning
         else:
             # Record Time-Out and lock door
             record_time_out(finger.finger_id)
@@ -159,8 +161,16 @@ def auto_scan_fingerprint():
     else:
         messagebox.showinfo("No Match", "No matching fingerprint found in the database.")
 
-def lock_door_and_resume():
-    auto_scan_fingerprint()  # Resume fingerprint scanning without locking the door
+def auto_scan_nfc():
+    print("Scanning for NFC UID...")
+    # Simulate NFC UID detection (replace with actual NFC scanning logic)
+    nfc_uid_detected = True  # Replace with actual UID detection logic
+
+    if nfc_uid_detected:
+        run_rfid_script()
+    else:
+        root.after(5000, auto_scan_nfc)  # Retry after 5 seconds if no UID is detected
+
 def center_widget(parent, widget, width, height, y_offset=0):
     """Center a widget within its parent, optionally with a vertical offset."""
     parent_width = parent.winfo_width()
@@ -222,17 +232,16 @@ current_y += vertical_spacing  # Add spacing below the subheading
 center_widget(panel, image_label, desired_width, desired_height, current_y)
 
 # Start scanning for fingerprint
-root.after(1000, auto_scan_fingerprint)  # Start the fingerprint scan after 1 second
+root.after(500, auto_scan_fingerprint)  # Wait 0.5 seconds before starting
 
-# Define a cleanup function to ensure GPIO is handled correctly
-def cleanup():
-    # Optionally, you can choose to keep the GPIO state as is
-    print("Cleanup called.")
+# Bind window close event to lock door and terminate script
+def on_close():
+    lock_door()
+    terminate_external_script()
+    GPIO.cleanup()
+    root.destroy()
 
-# Register the cleanup function to be called on exit
-atexit.register(cleanup)
+root.protocol("WM_DELETE_WINDOW", on_close)
 
-# Run the Tkinter event loop
+# Start the Tkinter event loop
 root.mainloop()
-
-
