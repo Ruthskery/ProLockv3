@@ -30,8 +30,8 @@ def main():
         root.quit()  # Stop the Tkinter main loop
         root.destroy()  # Destroy the window
 
-        # Use subprocess to start 1.py
-        command = ['python', '1.py']
+        # Use the absolute path to 1.py if it's not in the same directory
+        command = ['python', '1.py']  # Use full path if necessary
         print(f"Running command: {' '.join(command)}")
         result = subprocess.run(command, capture_output=True, text=True)
         print(f"Command output: {result.stdout}")  # Print the output of the command
