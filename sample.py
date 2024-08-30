@@ -40,22 +40,23 @@ def main():
             print(f"UID Detected in 2.py: {uid}")
             label.config(text=f"UID Detected: {uid}")
             start_time = time.time()  # Reset the start time on UID detection
-            
+
             # Reset the timeout timer
             global timeout_timer
             if 'timeout_timer' in globals():
                 root.after_cancel(timeout_timer)  # Cancel any previous timeout timer
             timeout_timer = root.after(timeout_duration * 1000, on_timeout)  # Set a new timeout timer
         else:
-            # Check if the card was previously detected and remove it from display
-            if time.time() - start_time <= timeout_duration:
-                label.config(text="No UID Detected")
-            
+            # Remove UID from display if the card is no longer detected
+            if label.cget("text") != "Waiting for UID or timer to restart...":
+                print("UID no longer detected, resetting display...")
+                label.config(text="Waiting for UID or timer to restart...")
+
             # Check if the timeout has elapsed
             if time.time() - start_time > timeout_duration:
                 on_timeout()  # Close window and restart 1.py
             else:
-                root.after(1000, check_nfc)  # Check for UID every 1 second
+                root.after(1000, check_nfc)  # Continue scanning for UID every 1 second
 
     # Initialize timeout timer
     timeout_timer = root.after(timeout_duration * 1000, on_timeout)
