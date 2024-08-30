@@ -23,6 +23,7 @@ def main():
     label.pack(pady=50)
 
     start_time = time.time()  # Track the start time for NFC detection
+    timeout_duration = 5  # Timeout duration in seconds
 
     def on_timeout():
         print("5 seconds passed. Closing window and restarting 1.py...")
@@ -37,16 +38,24 @@ def main():
             print(f"UID Detected in 2.py: {uid}")
             label.config(text=f"UID Detected: {uid}")
             start_time = time.time()  # Reset the start time on UID detection
-        elif time.time() - start_time > 5:  # 5-second timeout for NFC detection
-            on_timeout()  # Close window and restart 1.py
+            # Restart the timeout countdown
+            root.after_cancel(timeout_timer)  # Cancel any previous timeout timer
+            # Set a new timeout timer
+            global timeout_timer
+            timeout_timer = root.after(timeout_duration * 1000, on_timeout)
         else:
-            root.after(1000, check_nfc)  # Check for UID every 1 second
+            # Check if the timeout has elapsed
+            if time.time() - start_time > timeout_duration:
+                on_timeout()  # Close window and restart 1.py
+            else:
+                root.after(1000, check_nfc)  # Check for UID every 1 second
+
+    # Initialize timeout timer
+    global timeout_timer
+    timeout_timer = root.after(timeout_duration * 1000, on_timeout)
 
     # Start checking for UID after 1 second
     root.after(1000, check_nfc)
-
-    # Set a timer to close the window and restart 1.py after 5 seconds
-    root.after(5000, on_timeout)
 
     root.mainloop()
 
