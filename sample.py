@@ -5,7 +5,6 @@ import nfc
 import subprocess
 
 def detect_uid():
-    # Detect the UID using nfcpy
     try:
         clf = nfc.ContactlessFrontend('usb')
         tag = clf.connect(rdwr={'on-connect': lambda tag: False})
@@ -30,7 +29,7 @@ def main():
         root.quit()  # Stop the Tkinter main loop
         root.destroy()  # Destroy the window
 
-        # Use the absolute path to 1.py if it's not in the same directory
+        # Use subprocess to start 1.py
         command = ['python', '1.py']  # Use full path if necessary
         print(f"Running command: {' '.join(command)}")
         result = subprocess.run(command, capture_output=True, text=True)
@@ -39,15 +38,19 @@ def main():
 
     def check_uid():
         nonlocal start_time
-        uid = detect_uid()
-        if uid:
-            print(f"UID Detected in 2.py: {uid}")
-            label.config(text=f"UID Detected: {uid}")
-            start_time = time.time()  # Reset the start time on UID detection
-        elif time.time() - start_time > 5:  # 5-second timeout
-            on_timeout()  # Close window and restart 1.py
-        else:
-            root.after(1000, check_uid)  # Check for UID every 1 second
+        try:
+            uid = detect_uid()
+            print(f"UID: {uid}")  # Debugging output
+            if uid:
+                print(f"UID Detected in 2.py: {uid}")
+                label.config(text=f"UID Detected: {uid}")
+                start_time = time.time()  # Reset the start time on UID detection
+            elif time.time() - start_time > 5:  # 5-second timeout
+                on_timeout()  # Close window and restart 1.py
+            else:
+                root.after(1000, check_uid)  # Check for UID every 1 second
+        except Exception as e:
+            print(f"Error in check_uid: {e}")
 
     # Start checking for UID after 1 second
     root.after(1000, check_uid)
