@@ -22,6 +22,7 @@ def main():
     start_time = time.time()  # Track the start time
 
     def check_uid():
+        nonlocal start_time  # Allow modification of start_time from the outer scope
         uid = detect_uid()
         if uid:
             print(f"UID Detected in 2.py: {uid}")
