@@ -9,6 +9,7 @@ import subprocess
 import requests
 from datetime import datetime
 import atexit
+import nfc  # Make sure nfcpy is installed
 
 # API URLs
 api_url = "https://prolocklogger.pro/api/getuserbyfingerprint/"
@@ -162,14 +163,24 @@ def auto_scan_fingerprint():
         messagebox.showinfo("No Match", "No matching fingerprint found in the database.")
 
 def auto_scan_nfc():
-    print("Scanning for NFC UID...")
-    # Simulate NFC UID detection (replace with actual NFC scanning logic)
-    nfc_uid_detected = True  # Replace with actual UID detection logic
+    """Scan for NFC UID using the ACR122U reader."""
+    clf = nfc.ContactlessFrontend('usb')
+    
+    if not clf:
+        messagebox.showerror("NFC Error", "Failed to connect to NFC reader.")
+        return
 
-    if nfc_uid_detected:
+    def on_connect(tag):
+        print("NFC UID detected:", tag.uid)
         run_rfid_script()
-    else:
-        root.after(5000, auto_scan_nfc)  # Retry after 5 seconds if no UID is detected
+        return True  # Stop scanning after detecting the tag
+
+    try:
+        clf.connect(rdwr={'on-connect': on_connect})
+    except Exception as e:
+        print(f"Error scanning NFC: {e}")
+    finally:
+        clf.close()
 
 def center_widget(parent, widget, width, height, y_offset=0):
     """Center a widget within its parent, optionally with a vertical offset."""
@@ -232,7 +243,15 @@ current_y += vertical_spacing  # Add spacing below the subheading
 center_widget(panel, image_label, desired_width, desired_height, current_y)
 
 # Start scanning for fingerprint
-root.after(500, auto_scan_fingerprint)  # Wait 0.5 seconds before starting
+root.after(1000, auto_scan_fingerprint)  # Start the fingerprint scan after 1 second
+
+# Define a cleanup function to ensure GPIO is handled correctly
+def cleanup():
+    # Optionally, you can choose to keep the GPIO state as is
+    print("Cleanup called.")
+
+# Register the cleanup function to be called on exit
+atexit.register(cleanup)
 
 # Bind window close event to lock door and terminate script
 def on_close():
