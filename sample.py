@@ -2,13 +2,17 @@ import tkinter as tk
 import os
 import time
 import nfc
+import subprocess
 
 def detect_uid():
     # Detect the UID using nfcpy
-    clf = nfc.ContactlessFrontend('usb')
-    tag = clf.connect(rdwr={'on-connect': lambda tag: False})
-    if tag:
-        return tag.identifier.hex().upper()
+    try:
+        clf = nfc.ContactlessFrontend('usb')
+        tag = clf.connect(rdwr={'on-connect': lambda tag: False})
+        if tag:
+            return tag.identifier.hex().upper()
+    except Exception as e:
+        print(f"Error in detect_uid: {e}")
     return None
 
 def main():
@@ -26,11 +30,12 @@ def main():
         root.quit()  # Stop the Tkinter main loop
         root.destroy()  # Destroy the window
 
-        # Use the absolute path to 1.py if it's not in the same directory
-        command = 'python 1.py'
-        print(f"Running command: {command}")
-        result = os.system(command)  # Restart 1.py
-        print(f"Command result: {result}")  # Print the result of os.system
+        # Use subprocess to start 1.py
+        command = ['python', '1.py']
+        print(f"Running command: {' '.join(command)}")
+        result = subprocess.run(command, capture_output=True, text=True)
+        print(f"Command output: {result.stdout}")  # Print the output of the command
+        print(f"Command error: {result.stderr}")   # Print any error from the command
 
     def check_uid():
         nonlocal start_time
