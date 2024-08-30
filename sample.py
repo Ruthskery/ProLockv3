@@ -25,7 +25,12 @@ def main():
         print("5 seconds passed without UID detection. Closing window and restarting 1.py...")
         root.quit()  # Stop the Tkinter main loop
         root.destroy()  # Destroy the window
-        os.system('python 1.py')  # Restart 1.py
+
+        # Use the absolute path to 1.py if it's not in the same directory
+        command = 'python 1.py'
+        print(f"Running command: {command}")
+        result = os.system(command)  # Restart 1.py
+        print(f"Command result: {result}")  # Print the result of os.system
 
     def check_uid():
         nonlocal start_time
@@ -45,4 +50,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
