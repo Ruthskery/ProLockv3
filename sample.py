@@ -1,5 +1,4 @@
 import tkinter as tk
-import os
 import time
 import nfc
 
@@ -15,54 +14,29 @@ def detect_uid():
     return None
 
 def main():
-    global timeout_timer  # Declare timeout_timer as global at the start of the function
-
     root = tk.Tk()
-    root.title("2.py - NFC UID Detection")
+    root.title("NFC UID Detection")
     root.geometry("400x200")
 
-    label = tk.Label(root, text="Waiting for UID or timer to restart...", font=("Arial", 14))
+    label = tk.Label(root, text="Please scan your NFC card...", font=("Arial", 14))
     label.pack(pady=50)
 
-    start_time = time.time()  # Track the start time for NFC detection
-    timeout_duration = 10  # Timeout duration in seconds
-
-    def on_timeout():
-        print("10 seconds passed. Closing window and restarting 1.py...")
-        root.quit()  # Stop the Tkinter main loop
-        root.destroy()  # Destroy the window
-        os.system('python 1.py')  # Restart 1.py
-
     def check_nfc():
-        nonlocal start_time
         uid = detect_uid()
         if uid:
-            print(f"UID Detected in 2.py: {uid}")
+            print(f"UID Detected: {uid}")
             label.config(text=f"UID Detected: {uid}")
-            start_time = time.time()  # Reset the start time on UID detection
-
-            # Reset the timeout timer
-            global timeout_timer
-            if 'timeout_timer' in globals():
-                root.after_cancel(timeout_timer)  # Cancel any previous timeout timer
-            timeout_timer = root.after(timeout_duration * 1000, on_timeout)  # Set a new timeout timer
+            # Reset label to ask for scanning again after 2 seconds
+            root.after(2000, lambda: label.config(text="Please scan your NFC card..."))
         else:
-            # Remove UID from display if the card is no longer detected
-            if label.cget("text") != "Waiting for UID or timer to restart...":
-                print("UID no longer detected, resetting display...")
-                label.config(text="Waiting for UID or timer to restart...")
+            print("No NFC card detected. Waiting for scan...")
+            label.config(text="Please scan your NFC card...")
 
-            # Check if the timeout has elapsed
-            if time.time() - start_time > timeout_duration:
-                on_timeout()  # Close window and restart 1.py
-            else:
-                root.after(1000, check_nfc)  # Continue scanning for UID every 1 second
+        # Continue checking for NFC every 1 second
+        root.after(1000, check_nfc)
 
-    # Initialize timeout timer
-    timeout_timer = root.after(timeout_duration * 1000, on_timeout)
-
-    # Start checking for UID after 1 second
-    root.after(1000, check_nfc)
+    # Start the NFC check loop
+    check_nfc()
 
     root.mainloop()
 
