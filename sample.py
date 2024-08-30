@@ -9,7 +9,8 @@ import subprocess
 import requests
 from datetime import datetime
 import atexit
-import nfc  # Make sure nfcpy is installed
+import nfc  # Ensure nfcpy is installed
+import threading
 
 # API URLs
 api_url = "https://prolocklogger.pro/api/getuserbyfingerprint/"
@@ -49,10 +50,11 @@ def lock_door():
     print("Door locked.")
 
 def run_rfid_script():
+    global external_script_process
     # Close the current frame and run the RFID script
     root.destroy()  # Close current frame
     time.sleep(2)  # Add a 2-second delay for proper root.destroy
-    subprocess.Popen(["python3", "debug_nfc.py"])  # Run RFID script
+    external_script_process = subprocess.Popen(["python3", "debug_nfc.py"])  # Run RFID script
 
 def terminate_external_script():
     global external_script_process
@@ -152,7 +154,7 @@ def auto_scan_fingerprint():
             record_time_in(finger.finger_id, name)
             unlock_door()
             messagebox.showinfo("Welcome", f"Welcome, {name}! Door unlocked.")
-            root.after(1000, auto_scan_nfc)  # Wait 1 second then start NFC scanning
+            root.after(1000, start_nfc_scanning)  # Wait 1 second then start NFC scanning
         else:
             # Record Time-Out and lock door
             record_time_out(finger.finger_id)
@@ -161,6 +163,10 @@ def auto_scan_fingerprint():
             root.after(10000, auto_scan_fingerprint)  # Wait 10 seconds then resume scanning
     else:
         messagebox.showinfo("No Match", "No matching fingerprint found in the database.")
+
+def start_nfc_scanning():
+    """Start NFC scanning in a separate thread."""
+    threading.Thread(target=auto_scan_nfc, daemon=True).start()
 
 def auto_scan_nfc():
     """Scan for NFC UID using the ACR122U reader."""
@@ -231,7 +237,7 @@ root.update_idletasks()
 # Define vertical spacing between widgets
 vertical_spacing = 20  # Space between widgets
 
-# Place widgets sequentially from top to bottom
+# Place widgets with vertical spacing
 current_y = vertical_spacing
 
 current_y = center_widget(panel, main_heading, main_heading.winfo_reqwidth(), main_heading.winfo_reqheight(), current_y)
