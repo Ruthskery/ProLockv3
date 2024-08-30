@@ -19,14 +19,14 @@ def main():
     label = tk.Label(root, text="Waiting for UID...", font=("Arial", 14))
     label.pack(pady=50)
     
-    start_time = time.time()
+    start_time = time.time()  # Track the start time
 
     def check_uid():
         uid = detect_uid()
         if uid:
             print(f"UID Detected in 2.py: {uid}")
             label.config(text=f"UID Detected: {uid}")
-            # Do something with the UID here
+            start_time = time.time()  # Reset the start time on UID detection
         elif time.time() - start_time > 5:  # 5-second timeout
             root.quit()  # Stop the Tkinter main loop
             root.destroy()  # Destroy the window
