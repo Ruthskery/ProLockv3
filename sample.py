@@ -45,8 +45,11 @@ def main():
             label.config(text=f"UID Detected: {uid}")
             reset_timeout()  # Reset the timeout timer on UID detection
         else:
-            # Continue checking for UID if timeout has not elapsed
-            root.after(1000, check_nfc)  # Check for UID every 1 second
+            print("No UID Detected in 2.py")
+            label.config(text="No UID Detected")
+        
+        # Continue scanning regardless of UID detection
+        root.after(1000, check_nfc)  # Check for UID every 1 second
 
     # Initialize timeout timer
     reset_timeout()
