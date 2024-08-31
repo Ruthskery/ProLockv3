@@ -39,11 +39,12 @@ def fingerprint_task(fingerprint_status):
             fingerprint_status.set(f"Error: {e}")
 
 # Initialize the NFC reader
-def nfc_task(nfc_status):
+def nfc_task(nfc_status, uid_display):
     def on_connect(tag):
         # Extract and display the UID of the NFC tag
         uid = tag.identifier.hex().upper()
         nfc_status.set(f"NFC Tag detected! UID: {uid}")
+        uid_display.set(uid)  # Update the UID display in the Tkinter GUI
 
     try:
         clf = nfc.ContactlessFrontend('usb')
@@ -93,9 +94,17 @@ nfc_status = tk.StringVar()
 nfc_status_label = ttk.Label(right_frame, textvariable=nfc_status, wraplength=250)
 nfc_status_label.pack()
 
+# Label to display the detected UID
+uid_label = ttk.Label(right_frame, text="UID:", font=("Arial", 14))
+uid_label.pack(pady=10)
+
+uid_display = tk.StringVar()
+uid_display_label = ttk.Label(right_frame, textvariable=uid_display, font=("Arial", 14))
+uid_display_label.pack()
+
 # Start the fingerprint and NFC tasks in separate threads
 fingerprint_thread = threading.Thread(target=fingerprint_task, args=(fingerprint_status,))
-nfc_thread = threading.Thread(target=nfc_task, args=(nfc_status,))
+nfc_thread = threading.Thread(target=nfc_task, args=(nfc_status, uid_display))
 
 fingerprint_thread.start()
 nfc_thread.start()
