@@ -482,6 +482,16 @@ nfc_thread.start()
 update_time()
 
 # Start the Tkinter main loop
+
+
+
+
+Traceback (most recent call last):
+  File "/home/miko/Downloads/prolockv2/prolock_threading.py", line 476, in <module>
+    fetch_recent_logs()
+  File "/home/miko/Downloads/prolockv2/prolock_threading.py", line 297, in fetch_recent_logs
+    for i in logs_tree.get_children():
+NameError: name 'logs_tree' is not defined
 root.mainloop()
 
 # Ensure threads are cleaned up properly
