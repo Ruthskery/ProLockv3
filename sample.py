@@ -353,15 +353,6 @@ def read_nfc_loop():
     # Schedule the function to run again after a short delay
     root.after(1000, read_nfc_loop)
 
-# Update the real-time date and time display
-def update_time():
-    now = datetime.now()
-    current_time = now.strftime("%A %d %m %Y %H:%M")
-    time_label.config(text=f"{current_time}")
-    root.after(1000, update_time)  # Update every second
-
-update_time()
-
 # Create the main Tkinter window
 root = tk.Tk()
 root.title("Fingerprint and NFC Reader")
@@ -373,8 +364,19 @@ root.geometry("1000x800")
 time_frame = ttk.Frame(root, padding="10")
 time_frame.pack(side="top", fill="x")
 
+# Define the time_label before calling update_time
 time_label = ttk.Label(time_frame, text="", font=("Arial", 14))
 time_label.pack()
+
+# Update the real-time date and time display
+def update_time():
+    now = datetime.now()
+    current_time = now.strftime("%A %d %m %Y %H:%M")
+    time_label.config(text=f"{current_time}")
+    root.after(1000, update_time)  # Update every second
+
+# Now call update_time after defining time_label
+update_time()
 
 # Create a top frame to hold the fingerprint and NFC frames side by side
 top_frame = ttk.Frame(root, padding="10")
@@ -479,12 +481,3 @@ root.mainloop()
 # Ensure threads are cleaned up properly
 fingerprint_thread.join()
 nfc_thread.join()
-
-
-
-Traceback (most recent call last):
-  File "/home/miko/Downloads/prolockv2/prolock_threading.py", line 364, in <module>
-    update_time()
-  File "/home/miko/Downloads/prolockv2/prolock_threading.py", line 361, in update_time
-    time_label.config(text=f"{current_time}")
-NameError: name 'time_label' is not defined
