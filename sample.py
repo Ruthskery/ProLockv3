@@ -81,7 +81,6 @@ def check_time_in_record_fingerprint(fingerprint_id):
         response = requests.get(url)
         response.raise_for_status()  # Raise an error for bad status codes
 
-        # Assuming the response is a list of logs
         logs = response.json()
 
         for log in logs:
@@ -108,12 +107,10 @@ def record_time_in_fingerprint(fingerprint_id, user_name, role_id="2"):
 def record_time_out_fingerprint(fingerprint_id):
     """Record the Time-Out event for the given fingerprint ID."""
     try:
-        # Prepare URL with query parameters
         url = f"{TIME_OUT_FINGERPRINT_URL}?fingerprint_id={fingerprint_id}&time_out={datetime.now().strftime('%H:%M')}"
         response = requests.put(url)
         response.raise_for_status()  # Raise an error for bad status codes
 
-        # Parse the JSON response
         result = response.json()
         print(result)
         print("Time-Out recorded successfully.")
@@ -189,6 +186,13 @@ def auto_scan_fingerprint():
             root.after(5000, auto_scan_fingerprint)  # Wait 5 seconds then resume scanning
     else:
         messagebox.showinfo("No Match", "No matching fingerprint found in the database.")
+
+# Initialize the NFC reader
+try:
+    clf = nfc.ContactlessFrontend('usb')
+except Exception as e:
+    print(f"Failed to initialize NFC reader: {e}")
+    clf = None  # Ensure clf is set to None if initialization fails
 
 # Start of NFC READER Functions
 def fetch_user_info(uid):
@@ -322,16 +326,23 @@ def update_result(message):
 def on_closing():
     global running
     running = False
-    if thread.is_alive():
-        thread.join()
-    if hasattr(clf, 'close') and clf is not None:
+    if fingerprint_thread.is_alive():
+        fingerprint_thread.join()
+    if nfc_thread.is_alive():
+        nfc_thread.join()
+    # Ensure clf is closed if it was initialized
+    if clf is not None:
         clf.close()
     root.destroy()
 
-# Initialize the NFC reader
+# NFC reader thread function
 def nfc_task(nfc_status, uid_display):
     global running
     while running:
+        if clf is None:
+            print("NFC reader is not initialized.")
+            time.sleep(1)
+            continue
         try:
             tag = clf.connect(rdwr={'on-connect': lambda tag: False})
             if tag:
@@ -487,10 +498,3 @@ root.mainloop()
 # Ensure threads are cleaned up properly
 fingerprint_thread.join()
 nfc_thread.join()
-
-
-
-Error: name 'clf' is not defined
-Error: name 'clf' is not defined
-Error: name 'clf' is not defined
-
