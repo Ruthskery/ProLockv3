@@ -46,6 +46,9 @@ def nfc_task(nfc_status, uid_display):
         nfc_status.set(f"NFC Tag detected! UID: {uid}")
         uid_display.set(uid)  # Update the UID display in the Tkinter GUI
 
+        # Simulate adding data to the table (example data)
+        add_table_entry("2024-08-31", "John Doe", "PC1", "123456", "4th Year", "CS4A", "Prof. Smith", "08:00 AM", "12:00 PM")
+
     try:
         clf = nfc.ContactlessFrontend('usb')
 
@@ -65,12 +68,16 @@ def nfc_task(nfc_status, uid_display):
     except Exception as e:
         nfc_status.set(f"Error: {e}")
 
+# Function to add an entry to the table
+def add_table_entry(date, name, pc, student_number, year, section, faculty, time_in, time_out):
+    table.insert("", "end", values=(date, name, pc, student_number, year, section, faculty, time_in, time_out))
+
 # Create the main Tkinter window
 root = tk.Tk()
 root.title("Fingerprint and NFC Reader")
 
 # Set up the layout
-root.geometry("600x400")
+root.geometry("900x600")
 
 # Create a frame for the fingerprint sensor on the left
 left_frame = ttk.Frame(root, padding="10")
@@ -101,6 +108,20 @@ uid_label.pack(pady=10)
 uid_display = tk.StringVar()
 uid_display_label = ttk.Label(right_frame, textvariable=uid_display, font=("Arial", 14))
 uid_display_label.pack()
+
+# Create a frame for the table
+table_frame = ttk.Frame(root, padding="10")
+table_frame.pack(side="bottom", fill="both", expand=True)
+
+# Create the table with the specified columns
+columns = ("Date", "Name", "PC", "Student Number", "Year", "Section", "Faculty", "Time-in", "Time-out")
+table = ttk.Treeview(table_frame, columns=columns, show="headings")
+
+for col in columns:
+    table.heading(col, text=col)
+    table.column(col, anchor="center")
+
+table.pack(fill="both", expand=True)
 
 # Start the fingerprint and NFC tasks in separate threads
 fingerprint_thread = threading.Thread(target=fingerprint_task, args=(fingerprint_status,))
