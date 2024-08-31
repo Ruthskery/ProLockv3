@@ -292,6 +292,12 @@ update_time()
 # Start the Tkinter main loop
 root.mainloop()
 
+Traceback (most recent call last):
+  File "/home/miko/Downloads/prolockv2/prolockv3/main.py", line 283
+    fingerprint_thread = threading.Thread(target=auto_scan_fingerprint))
+                                                                       ^
+SyntaxError: unmatched ')'
+
 # Ensure threads are cleaned up properly
 fingerprint_thread.join()
 nfc_thread.join()
