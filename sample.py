@@ -487,3 +487,10 @@ root.mainloop()
 # Ensure threads are cleaned up properly
 fingerprint_thread.join()
 nfc_thread.join()
+
+
+
+Error: name 'clf' is not defined
+Error: name 'clf' is not defined
+Error: name 'clf' is not defined
+
