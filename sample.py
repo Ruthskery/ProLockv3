@@ -41,7 +41,9 @@ def fingerprint_task(fingerprint_status):
 # Initialize the NFC reader
 def nfc_task(nfc_status):
     def on_connect(tag):
-        nfc_status.set(f"NFC Tag detected: {tag}")
+        # Extract and display the UID of the NFC tag
+        uid = tag.identifier.hex().upper()
+        nfc_status.set(f"NFC Tag detected! UID: {uid}")
 
     try:
         clf = nfc.ContactlessFrontend('usb')
