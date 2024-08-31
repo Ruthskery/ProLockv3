@@ -11,7 +11,7 @@ import requests
 
 # Global flags and settings
 nfc_enabled = threading.Event()
-is_in_timeout_mode = False
+is_in_timeout_mode = False  # Initialize here to ensure it's available globally
 
 # API URLs for Fingerprint and NFC
 FINGERPRINT_API_URL = "https://prolocklogger.pro/api/getuserbyfingerprint/"
@@ -280,6 +280,8 @@ def update_result(message):
     error_label.config(text=message)
 
 def read_nfc_loop():
+    global is_in_timeout_mode  # Declare the variable as global to ensure proper access
+
     def on_connect(tag):
         uid = tag.identifier.hex()
         fetch_user_info(uid)
@@ -401,7 +403,3 @@ fetch_recent_logs()
 
 # Start the Tkinter main loop
 root.mainloop()
-
-
-
-NFC Loop Error: cannot access local variable 'is_in_timeout_mode' where it is not associated with a value
