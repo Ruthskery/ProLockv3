@@ -14,9 +14,14 @@ nfc_enabled = threading.Event()
 
 # API URLs
 api_url = "https://prolocklogger.pro/api/getuserbyfingerprint/"
-TIME_IN_URL = "https://prolocklogger.pro/api/logs/time-in/fingerprint"
-TIME_OUT_URL = "https://prolocklogger.pro/api/logs/time-out/fingerprint"
-RECENT_LOGS_URL2 = 'https://prolocklogger.pro/api/recent-logs/by-fingerid'
+TIME_IN_FINGERPRINT_URL = "https://prolocklogger.pro/api/logs/time-in/fingerprint"
+TIME_OUT_FINGERPRINT_URL = "https://prolocklogger.pro/api/logs/time-out/fingerprint"
+RECENT_LOGS_FINGERPRINT_URL2 = 'https://prolocklogger.pro/api/recent-logs/by-fingerid'
+USER_INFO_URL = 'https://prolocklogger.pro/api/user-information/by-id-card'
+RECENT_LOGS_URL = 'https://prolocklogger.pro/api/recent-logs'
+TIME_IN_URL = 'https://prolocklogger.pro/api/logs/time-in'
+TIME_OUT_URL = 'https://prolocklogger.pro/api/logs/time-out'
+RECENT_LOGS_URL2 = 'https://prolocklogger.pro/api/recent-logs/by-uid'
 
 # GPIO pin configuration for the solenoid lock
 SOLENOID_PIN = 17
@@ -35,6 +40,13 @@ def initialize_serial():
         return None
 
 finger = initialize_serial()
+
+# Global variables
+root = tk.Tk()
+running = True
+script_run = False
+time_in_records = set()
+time_out_records = set()
 
 # State variables
 unlock_attempt = True
@@ -61,29 +73,24 @@ def get_user_details(fingerprint_id):
         messagebox.showerror("Request Error", f"Failed to connect to API: {e}")
         return None
 
-def check_time_in_record(fingerprint_id):
+def check_time_in_record_fingerprint(fingerprint_id):
     """Check if there is a Time-In record for the given fingerprint ID."""
     try:
-        url = f"{RECENT_LOGS_URL2}?fingerprint_id={fingerprint_id}"
+        url = f"{RECENT_LOGS_FINGERPRINT_URL2}?fingerprint_id={fingerprint_id}"
         response = requests.get(url)
         response.raise_for_status()  # Raise an error for bad status codes
-
-        # Assuming the response is a list of logs
         logs = response.json()
-
         for log in logs:
             if log.get('time_in') and not log.get('time_out'):
                 return True  # Time-In record exists and Time-Out has not been recorded
-
         return False
-
     except requests.RequestException as e:
         print(f"Error checking Time-In record: {e}")
         return False
 
-def record_time_in(fingerprint_id, user_name, role_id="2"):
+def record_time_in_fingerprint(fingerprint_id, user_name, role_id="2"):
     try:
-        url = f"{TIME_IN_URL}?fingerprint_id={fingerprint_id}&time_in={datetime.now().strftime('%H:%M')}&user_name={user_name}&role_id={role_id}"
+        url = f"{TIME_IN_FINGERPRINT_URL}?fingerprint_id={fingerprint_id}&time_in={datetime.now().strftime('%H:%M')}&user_name={user_name}&role_id={role_id}"
         response = requests.put(url)
         response.raise_for_status()
         result = response.json()
@@ -92,19 +99,15 @@ def record_time_in(fingerprint_id, user_name, role_id="2"):
     except requests.RequestException as e:
         messagebox.showerror("Error", f"Error recording Time-In: {e}")
 
-def record_time_out(fingerprint_id):
+def record_time_out_fingerprint(fingerprint_id):
     """Record the Time-Out event for the given fingerprint ID."""
     try:
-        # Prepare URL with query parameters
-        url = f"{TIME_OUT_URL}?fingerprint_id={fingerprint_id}&time_out={datetime.now().strftime('%H:%M')}"
+        url = f"{TIME_OUT_FINGERPRINT_URL}?fingerprint_id={fingerprint_id}&time_out={datetime.now().strftime('%H:%M')}"
         response = requests.put(url)
-        response.raise_for_status()  # Raise an error for bad status codes
-
-        # Parse the JSON response
+        response.raise_for_status()
         result = response.json()
         print(result)
         print("Time-Out recorded successfully.")
-
     except requests.RequestException as e:
         print(f"Error recording Time-Out: {e}")
 
@@ -114,15 +117,15 @@ def get_schedule(fingerprint_id):
         if response.status_code == 200:
             schedules = response.json()
             if schedules:
-                today = datetime.now().strftime('%A')  # Get the current day of the week
-                current_time = datetime.now().strftime('%H:%M')  # Get the current time
+                today = datetime.now().strftime('%A')
+                current_time = datetime.now().strftime('%H:%M')
                 for schedule in schedules:
                     if schedule['day_of_the_week'] == today:
                         start_time = schedule['class_start']
                         end_time = schedule['class_end']
                         if start_time <= current_time <= end_time:
-                            return True  # Schedule matches, allow access
-            return False  # No matching schedule or not within allowed time
+                            return True
+            return False
         else:
             messagebox.showerror("API Error", "Failed to fetch schedule from API.")
             return False
@@ -133,7 +136,6 @@ def get_schedule(fingerprint_id):
 # Initialize the fingerprint sensor
 def auto_scan_fingerprint():
     global unlock_attempt
-
     if not finger:
         return
 
@@ -146,6 +148,7 @@ def auto_scan_fingerprint():
         messagebox.showwarning("Error", "Failed to template the fingerprint image.")
         root.after(5000, auto_scan_fingerprint)  # Retry after 5 seconds
         return
+
     print("Searching...")
     if finger.finger_search() != adafruit_fingerprint.OK:
         messagebox.showwarning("Error", "Failed to search for fingerprint match.")
@@ -156,19 +159,16 @@ def auto_scan_fingerprint():
 
     # Fetch user details using API
     name = get_user_details(finger.finger_id)
-
     if name:
-        if get_schedule(finger.finger_id):  # Check if the current time is within the allowed schedule
-            if not check_time_in_record(finger.finger_id):
-                # Record Time-In and unlock door
-                record_time_in(finger.finger_id, name)
+        if get_schedule(finger.finger_id):
+            if not check_time_in_record_fingerprint(finger.finger_id):
+                record_time_in_fingerprint(finger.finger_id, name)
                 unlock_door()
                 messagebox.showinfo("Welcome", f"Welcome, {name}! Door unlocked.")
                 nfc_enabled.set()  # Enable NFC reader after a successful fingerprint match
                 root.after(5000, lock_door)  # Lock the door after 5 seconds
             else:
-                # Record Time-Out and lock door
-                record_time_out(finger.finger_id)
+                record_time_out_fingerprint(finger.finger_id)
                 lock_door()
                 messagebox.showinfo("Goodbye", f"Goodbye, {name}! Door locked.")
                 root.after(5000, auto_scan_fingerprint)  # Wait 5 seconds then resume scanning
@@ -177,127 +177,153 @@ def auto_scan_fingerprint():
     else:
         messagebox.showinfo("No Match", "No matching fingerprint found in the database.")
 
-#Initialize the NFC reader
-def nfc_task(nfc_status, uid_display):
-    def on_connect(tag):
-        # Extract and display the UID of the NFC tag
-        uid = tag.identifier.hex().upper()
-        nfc_status.set(f"NFC Tag detected! UID: {uid}")
-        uid_display.set(uid)  # Update the UID display in the Tkinter GUI
+# Start of NFC READER Functions
+def fetch_user_info(uid):
+    try:
+        url = f'{USER_INFO_URL}?id_card_id={uid}'
+        response = requests.get(url)
+        response.raise_for_status()
+        data = response.json()
+        user_number = data.get('user_number') or 'None'
+        user_name = data.get('user_name') or 'None'
+        year = data.get('year') or 'None'
+        block = data.get('block') or 'None'
 
-        # Simulate adding data to the table (example data)
-        add_table_entry("2024-08-31", "John Doe", "PC1", "123456", "4th Year", "CS4A", "Prof. Smith", "08:00 AM", "12:00 PM")
+        student_number_entry.delete(0, tk.END)
+        student_number_entry.insert(0, user_number)
+        name_entry.delete(0, tk.END)
+        name_entry.insert(0, user_name)
+        year_entry.delete(0, tk.END)
+        year_entry.insert(0, year)
+        section_entry.delete(0, tk.END)
+        section_entry.insert(0, block)
 
+        error_label.config(text="")
+
+        if check_time_in_record(uid):
+            record_time_out(uid)
+        else:
+            record_time_in(uid, user_name, year)
+
+        update_records(uid)
+
+    except requests.HTTPError as http_err:
+        if response.status_code == 404:
+            clear_data()
+            update_result("Card is not registered, Please contact the administrator.")
+        else:
+            update_result(f"HTTP error occurred: {http_err}")
+    except requests.RequestException as e:
+        update_result(f"Error fetching user info: {e}")
+
+def update_records(uid):
+    if check_time_in_record(uid):
+        time_in_records.add(uid)
+    else:
+        time_out_records.add(uid)
+
+def check_time_in_record(rfid_number):
+    try:
+        url = f'{RECENT_LOGS_URL2}?rfid_number={rfid_number}'
+        response = requests.get(url)
+        response.raise_for_status()
+        logs = response.json()
+        return any(log.get('time_in') and not log.get('time_out') for log in logs)
+    except requests.RequestException as e:
+        messagebox.showerror("Error", f"Error checking time-in record: {e}")
+        return False
+
+def record_time_in(uid, name, year):
+    try:
+        now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        response = requests.post(TIME_IN_URL, json={'uid': uid, 'time_in': now, 'user_name': name})
+        response.raise_for_status()
+        messagebox.showinfo("Success", "Time-In recorded successfully.")
+    except requests.RequestException as e:
+        messagebox.showerror("Error", f"Error recording time-in: {e}")
+
+def record_time_out(uid):
+    try:
+        now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        response = requests.post(TIME_OUT_URL, json={'uid': uid, 'time_out': now})
+        response.raise_for_status()
+        messagebox.showinfo("Success", "Time-Out recorded successfully.")
+    except requests.RequestException as e:
+        messagebox.showerror("Error", f"Error recording time-out: {e}")
+
+def clear_data():
+    student_number_entry.delete(0, tk.END)
+    name_entry.delete(0, tk.END)
+    year_entry.delete(0, tk.END)
+    section_entry.delete(0, tk.END)
+
+def update_result(message):
+    error_label.config(text=message)
+
+# Initialize the NFC reader
+def init_nfc_reader():
     try:
         clf = nfc.ContactlessFrontend('usb')
-
-        while True:
-            # Wait until NFC is enabled by the fingerprint match
-            nfc_enabled.wait()
-            nfc_status.set("NFC reader active. Waiting for NFC tag...")
-
-            clf.connect(rdwr={'on-connect': on_connect})
-
-            # Reset the event so the NFC task waits for the next fingerprint match
-            nfc_enabled.clear()
-            nfc_status.set("NFC reader waiting for fingerprint match...")
-
-            time.sleep(1)
-
+        return clf
     except Exception as e:
-        nfc_status.set(f"Error: {e}")
+        messagebox.showerror("NFC Error", f"Failed to initialize NFC reader: {e}")
+        return None
 
-# Function to add an entry to the table
-def add_table_entry(date, name, pc, student_number, year, section, faculty, time_in, time_out):
-    table.insert("", "end", values=(date, name, pc, student_number, year, section, faculty, time_in, time_out))
+def scan_nfc():
+    clf = init_nfc_reader()
+    if clf:
+        while running:
+            tag = clf.poll()
+            if tag:
+                uid = tag.identifier
+                uid_str = ''.join([f"{byte:02X}" for byte in uid])
+                fetch_user_info(uid_str)
+                time.sleep(1)  # Prevent continuous scanning
 
-# Update the real-time date and time display
-def update_time():
-    now = datetime.now()
-    current_time = now.strftime("%Y-%m-%d %H:%M:%S")
-    time_label.config(text=f"Current Date and Time: {current_time}")
-    root.after(1000, update_time)  # Update every second
+# GUI Setup
+def setup_gui():
+    global root
+    root.title("Fingerprint and NFC Reader")
 
-# Create the main Tkinter window
-root = tk.Tk()
-root.title("Fingerprint and NFC Reader")
+    # Create and place widgets
+    ttk.Label(root, text="Student Number:").grid(row=0, column=0, padx=10, pady=10)
+    global student_number_entry
+    student_number_entry = ttk.Entry(root)
+    student_number_entry.grid(row=0, column=1, padx=10, pady=10)
 
-# Set up the layout
-root.geometry("700x500")
+    ttk.Label(root, text="Name:").grid(row=1, column=0, padx=10, pady=10)
+    global name_entry
+    name_entry = ttk.Entry(root)
+    name_entry.grid(row=1, column=1, padx=10, pady=10)
 
-# Create a frame for the real-time date and time display
-time_frame = ttk.Frame(root, padding="10")
-time_frame.pack(side="top", fill="x")
+    ttk.Label(root, text="Year:").grid(row=2, column=0, padx=10, pady=10)
+    global year_entry
+    year_entry = ttk.Entry(root)
+    year_entry.grid(row=2, column=1, padx=10, pady=10)
 
-time_label = ttk.Label(time_frame, text="", font=("Arial", 14))
-time_label.pack()
+    ttk.Label(root, text="Section:").grid(row=3, column=0, padx=10, pady=10)
+    global section_entry
+    section_entry = ttk.Entry(root)
+    section_entry.grid(row=3, column=1, padx=10, pady=10)
 
-# Create a top frame to hold the fingerprint and NFC frames side by side
-top_frame = ttk.Frame(root, padding="10")
-top_frame.pack(side="top", fill="x")
+    global error_label
+    error_label = ttk.Label(root, text="", foreground="red")
+    error_label.grid(row=4, column=0, columnspan=2, padx=10, pady=10)
 
-# Create a frame for the fingerprint sensor on the left
-left_frame = ttk.Frame(top_frame, padding="10")
-left_frame.pack(side="left", fill="y", expand=True)
+    # Start fingerprint scanning in a separate thread
+    threading.Thread(target=auto_scan_fingerprint, daemon=True).start()
 
-fingerprint_label = ttk.Label(left_frame, text="Fingerprint Sensor", font=("Arial", 16))
-fingerprint_label.pack(pady=20)
+    # Start NFC scanning in a separate thread
+    threading.Thread(target=scan_nfc, daemon=True).start()
 
-# Create a frame for the NFC reader on the right
-right_frame = ttk.Frame(top_frame, padding="10")
-right_frame.pack(side="right", fill="y", expand=True)
+    root.protocol("WM_DELETE_WINDOW", on_closing)
+    root.mainloop()
 
-nfc_label = ttk.Label(right_frame, text="NFC Reader", font=("Arial", 16))
-nfc_label.pack(pady=20)
+def on_closing():
+    global running
+    running = False
+    GPIO.cleanup()  # Cleanup GPIO
+    root.destroy()
 
-nfc_status = tk.StringVar()
-nfc_status_label = ttk.Label(right_frame, textvariable=nfc_status, wraplength=250)
-nfc_status_label.pack()
-
-# Label to display the detected UID
-uid_label = ttk.Label(right_frame, text="UID:", font=("Arial", 14))
-uid_label.pack(pady=10)
-
-uid_display = tk.StringVar()
-uid_display_label = ttk.Label(right_frame, textvariable=uid_display, font=("Arial", 14))
-uid_display_label.pack()
-
-# Create a frame for the table below the top frame
-table_frame = ttk.Frame(root, padding="10")
-table_frame.pack(side="bottom", fill="both", expand=True)
-
-# Create the table with the specified columns
-columns = ("Date", "Name", "PC", "Student Number", "Year", "Section", "Faculty", "Time-in", "Time-out")
-table = ttk.Treeview(table_frame, columns=columns, show="headings")
-
-# Set proportional column widths
-column_widths = [80, 120, 40, 100, 70, 70, 120, 80, 80]
-
-for col, width in zip(columns, column_widths):
-    table.heading(col, text=col)
-    table.column(col, anchor="center", width=width)
-
-table.pack(fill="both", expand=True)
-
-# Start the fingerprint and NFC tasks in separate threads
-fingerprint_thread = threading.Thread(target=fingerprint_task, args=(fingerprint_status,))
-nfc_thread = threading.Thread(target=nfc_task, args=(nfc_status, uid_display))
-
-fingerprint_thread.start()
-nfc_thread.start()
-
-# Start the real-time clock update
-update_time()
-
-# Start the Tkinter main loop
-root.mainloop()
-
-Traceback (most recent call last):
-  File "/home/miko/Downloads/prolockv2/prolockv3/main.py", line 283
-    fingerprint_thread = threading.Thread(target=auto_scan_fingerprint))
-                                                                       ^
-SyntaxError: unmatched ')'
-
-# Ensure threads are cleaned up properly
-fingerprint_thread.join()
-nfc_thread.join()
+if __name__ == "__main__":
+    setup_gui()
