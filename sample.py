@@ -401,3 +401,7 @@ fetch_recent_logs()
 
 # Start the Tkinter main loop
 root.mainloop()
+
+
+
+NFC Loop Error: cannot access local variable 'is_in_timeout_mode' where it is not associated with a value
