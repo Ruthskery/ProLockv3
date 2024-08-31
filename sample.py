@@ -154,7 +154,13 @@ def auto_scan_fingerprint():
     else:
         messagebox.showinfo("No Match", "No matching fingerprint found in the database.")
 
-clf = nfc.ContactlessFrontend('usb')
+# Initialize NFC frontend
+try:
+    clf = nfc.ContactlessFrontend('usb')
+except Exception as e:
+    messagebox.showerror("NFC Error", f"Failed to initialize NFC reader: {e}")
+    clf = None
+
 time_in_records = set()
 time_out_records = set()
 
@@ -277,25 +283,30 @@ def read_nfc_loop():
     def on_connect(tag):
         uid = tag.identifier.hex()
         fetch_user_info(uid)
+        return True
 
     try:
-        clf = nfc.ContactlessFrontend('usb')
-
         while True:
+            # Wait for the event triggered by fingerprint match
             nfc_enabled.wait()
 
-            if is_in_timeout_mode:
-                clf.connect(rdwr={'on-connect': on_connect})
+            if clf and is_in_timeout_mode:
+                try:
+                    clf.connect(rdwr={'on-connect': on_connect})
+                except Exception as e:
+                    print(f"NFC read error: {e}")
+                    time.sleep(1)  # Delay to prevent excessive error logging
 
+                # Check if all time-ins are accounted for as time-outs
                 if all_time_ins_accounted_for():
-                    nfc_enabled.clear()
-                    is_in_timeout_mode = False
-                    root.after(5000, auto_scan_fingerprint)
+                    nfc_enabled.clear()  # Stop NFC loop
+                    is_in_timeout_mode = False  # Reset to normal mode
+                    root.after(5000, auto_scan_fingerprint)  # Restart fingerprint scanning after delay
 
             time.sleep(1)
 
     except Exception as e:
-        print(f"Error: {e}")
+        print(f"NFC Loop Error: {e}")
 
 # Create the main Tkinter window
 root = tk.Tk()
