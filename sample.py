@@ -493,6 +493,30 @@ update_time()
 
 # Start the Tkinter main loop
 root.protocol("WM_DELETE_WINDOW", on_closing)
+
+
+
+Exception in thread Thread-1 (auto_scan_fingerprint):
+Traceback (most recent call last):
+  File "/usr/lib/python3.11/threading.py", line 1038, in _bootstrap_inner
+    self.run()
+  File "/usr/lib/python3.11/threading.py", line 975, in run
+    self._target(*self._args, **self._kwargs)
+  File "/home/miko/Downloads/prolockv2/prolock_threading.py", line 171, in auto_scan_fingerprint
+    if get_schedule(finger.finger_id):  # Check if the current time is within the allowed schedule
+       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/miko/Downloads/prolockv2/prolock_threading.py", line 137, in get_schedule
+    messagebox.showerror("API Error", "Failed to fetch schedule from API.")
+  File "/usr/lib/python3.11/tkinter/messagebox.py", line 98, in showerror
+    return _show(title, message, ERROR, OK, **options)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.11/tkinter/messagebox.py", line 76, in _show
+    res = Message(**options).show()
+          ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.11/tkinter/commondialog.py", line 45, in show
+    s = master.tk.call(self.command, *master._options(self.options))
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+RuntimeError: main thread is not in main loop
 root.mainloop()
 
 # Ensure threads are cleaned up properly
