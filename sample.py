@@ -214,8 +214,8 @@ def add_table_entry(date, name, pc, student_number, year, section, faculty, time
 # Update the real-time date and time display
 def update_time():
     now = datetime.now()
-    current_time = now.strftime("%Y-%m-%d %H:%M:%S")
-    time_label.config(text=f"Current Date and Time: {current_time}")
+    current_time = now.strftime("%A %d %m %Y %H:%M")
+    time_label.config(text=f"{current_time}")
     root.after(1000, update_time)  # Update every second
 
 # Create the main Tkinter window
