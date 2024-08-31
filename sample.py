@@ -158,7 +158,7 @@ def auto_scan_fingerprint():
                 messagebox.showinfo("Welcome", f"Welcome, {name}! Door unlocked.")
                 nfc_enabled.set()
                 is_in_timeout_mode = True
-                root.after(5000, lock_door)
+                root.after(15000, lock_door)  # Keep the door unlocked for 15 seconds
             else:
                 record_time_out_fingerprint(finger.finger_id)
                 lock_door()
@@ -317,15 +317,16 @@ def read_nfc_loop():
         clf = nfc.ContactlessFrontend('usb')
 
         while True:
-            nfc_enabled.wait()
+            nfc_enabled.wait()  # Wait for the event to be set by the fingerprint match
 
             if is_in_timeout_mode:
                 clf.connect(rdwr={'on-connect': on_connect})
 
+                # Check if all time-ins are accounted for as time-outs
                 if all_time_ins_accounted_for():
-                    nfc_enabled.clear()
-                    is_in_timeout_mode = False
-                    auto_scan_fingerprint()
+                    nfc_enabled.clear()  # Stop NFC loop
+                    is_in_timeout_mode = False  # Reset to normal mode
+                    root.after(5000, auto_scan_fingerprint)  # Restart fingerprint scanning after delay
 
             time.sleep(1)
 
