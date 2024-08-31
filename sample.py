@@ -5,6 +5,7 @@ import adafruit_fingerprint
 import nfc
 import tkinter as tk
 from tkinter import ttk
+from datetime import datetime
 
 # Global flag to control NFC activation
 nfc_enabled = threading.Event()
@@ -72,12 +73,26 @@ def nfc_task(nfc_status, uid_display):
 def add_table_entry(date, name, pc, student_number, year, section, faculty, time_in, time_out):
     table.insert("", "end", values=(date, name, pc, student_number, year, section, faculty, time_in, time_out))
 
+# Update the real-time date and time display
+def update_time():
+    now = datetime.now()
+    current_time = now.strftime("%Y-%m-%d %H:%M:%S")
+    time_label.config(text=f"Current Date and Time: {current_time}")
+    root.after(1000, update_time)  # Update every second
+
 # Create the main Tkinter window
 root = tk.Tk()
 root.title("Fingerprint and NFC Reader")
 
 # Set up the layout
-root.geometry("900x600")
+root.geometry("700x500")
+
+# Create a frame for the real-time date and time display
+time_frame = ttk.Frame(root, padding="10")
+time_frame.pack(side="top", fill="x")
+
+time_label = ttk.Label(time_frame, text="", font=("Arial", 14))
+time_label.pack()
 
 # Create a top frame to hold the fingerprint and NFC frames side by side
 top_frame = ttk.Frame(root, padding="10")
@@ -121,9 +136,12 @@ table_frame.pack(side="bottom", fill="both", expand=True)
 columns = ("Date", "Name", "PC", "Student Number", "Year", "Section", "Faculty", "Time-in", "Time-out")
 table = ttk.Treeview(table_frame, columns=columns, show="headings")
 
-for col in columns:
+# Set proportional column widths
+column_widths = [80, 120, 40, 100, 70, 70, 120, 80, 80]
+
+for col, width in zip(columns, column_widths):
     table.heading(col, text=col)
-    table.column(col, anchor="center")
+    table.column(col, anchor="center", width=width)
 
 table.pack(fill="both", expand=True)
 
@@ -133,6 +151,9 @@ nfc_thread = threading.Thread(target=nfc_task, args=(nfc_status, uid_display))
 
 fingerprint_thread.start()
 nfc_thread.start()
+
+# Start the real-time clock update
+update_time()
 
 # Start the Tkinter main loop
 root.mainloop()
