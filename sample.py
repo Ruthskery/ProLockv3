@@ -479,3 +479,12 @@ root.mainloop()
 # Ensure threads are cleaned up properly
 fingerprint_thread.join()
 nfc_thread.join()
+
+
+
+Traceback (most recent call last):
+  File "/home/miko/Downloads/prolockv2/prolock_threading.py", line 364, in <module>
+    update_time()
+  File "/home/miko/Downloads/prolockv2/prolock_threading.py", line 361, in update_time
+    time_label.config(text=f"{current_time}")
+NameError: name 'time_label' is not defined
