@@ -223,7 +223,7 @@ root = tk.Tk()
 root.title("Fingerprint and NFC Reader")
 
 # Set up the layout
-root.geometry("700x500")
+root.geometry("1000x800")
 
 # Create a frame for the real-time date and time display
 time_frame = ttk.Frame(root, padding="10")
