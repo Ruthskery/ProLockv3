@@ -5,7 +5,6 @@ import nfc
 import threading
 import time
 import requests
-import subprocess
 
 # Replace these URLs with your actual Laravel API URLs
 USER_INFO_URL = 'https://prolocklogger.pro/api/user-information/by-id-card'
@@ -16,7 +15,7 @@ RECENT_LOGS_URL2 = 'https://prolocklogger.pro/api/recent-logs/by-uid'
 
 root = tk.Tk()
 root.title("RFID Scanning and Attendance")
-root.geometry("1000x450")  # Adjust window size
+root.geometry("1200x500")  # Adjust window size
 
 # Define custom fonts
 heading_font = font.Font(family="Helvetica", size=16, weight="bold")
@@ -70,8 +69,8 @@ section_entry.grid(row=3, column=1, padx=10, pady=5)
 error_label = tk.Label(root, text="", font=("Helvetica", 10, "bold", "italic"), foreground="red")
 error_label.pack(pady=10)
 
-# Create the Treeview for logs
-columns = ("Student Name", "Block", "Year", "Time-In", "Time-Out")
+# Create the Treeview for logs with new columns
+columns = ("Date", "Name", "PC", "Student Number", "Year", "Section", "Faculty", "Time-in", "Time-out")
 logs_tree = ttk.Treeview(root, columns=columns, show='headings')
 logs_tree.pack(pady=10, fill='both', expand=True)
 
@@ -82,7 +81,6 @@ for col in columns:
 
 clf = nfc.ContactlessFrontend('usb')
 running = True
-script_run = False  # Flag to indicate if the script has been run
 
 time_in_records = set()
 time_out_records = set()
@@ -101,11 +99,15 @@ def fetch_recent_logs():
         # Insert new logs
         for log in logs:
             logs_tree.insert("", "end", values=(
-                log['user_name'],
-                log['block_name'],
-                log['year'],
-                log['time_in'],
-                log['time_out']
+                log.get('date', 'N/A'),
+                log.get('user_name', 'N/A'),
+                log.get('pc_name', 'N/A'),  # Assuming 'PC' refers to a field called 'pc_name'
+                log.get('student_number', 'N/A'),
+                log.get('year', 'N/A'),
+                log.get('section', 'N/A'),
+                log.get('faculty', 'N/A'),
+                log.get('time_in', 'N/A'),
+                log.get('time_out', 'N/A')
             ))
 
     except requests.RequestException as e:
@@ -144,9 +146,6 @@ def fetch_user_info(uid):
 
         update_records(uid)
 
-        if all_time_ins_accounted_for():
-            run_external_script()
-
     except requests.HTTPError as http_err:
         if response.status_code == 404:
             clear_data()
@@ -161,17 +160,6 @@ def update_records(uid):
         time_in_records.add(uid)
     else:
         time_out_records.add(uid)
-
-def all_time_ins_accounted_for():
-    return time_in_records == time_out_records
-
-def run_external_script():
-    global script_run
-    try:
-        subprocess.Popen(['python', 'debug_fingerprint.py'])
-        script_run = True  # Set the flag to True after the script runs
-    except Exception as e:
-        update_result(f"Error running script: {e}")
 
 def check_time_in_record(rfid_number):
     try:
@@ -239,11 +227,6 @@ def read_nfc_loop():
                 uid = tag.identifier.hex()
                 fetch_user_info(uid)
                 time.sleep(1)
-
-            # Check if the script has been run; if so, terminate the loop
-            if script_run:
-                running = False
-                root.quit()  # Terminate the Tkinter main loop
 
         except Exception as e:
             print(f"Error: {e}")
