@@ -190,7 +190,7 @@ def auto_scan_fingerprint():
     else:
         messagebox.showinfo("No Match", "No matching fingerprint found in the database.")
 
-#Start of NFC READER Functions
+# Start of NFC READER Functions
 def fetch_user_info(uid):
     try:
         url = f'{USER_INFO_URL}?id_card_id={uid}'
@@ -294,12 +294,12 @@ def fetch_recent_logs():
         logs = response.json()
 
         # Clear existing logs
-        for i in logs_tree.get_children():
-            logs_tree.delete(i)
+        for i in table.get_children():  # Corrected from logs_tree to table
+            table.delete(i)
 
         # Insert new logs
         for log in logs:
-            logs_tree.insert("", "end", values=(
+            table.insert("", "end", values=(
                 log['user_name'],
                 log['block_name'],
                 log['year'],
@@ -328,8 +328,7 @@ def on_closing():
         clf.close()
     root.destroy()
 
-
-#Initialize the NFC reader
+# Initialize the NFC reader
 def nfc_task(nfc_status, uid_display):
     global running
     while running:
@@ -416,7 +415,7 @@ date_label.grid(row=0, column=0, padx=10, pady=5, sticky='w')
 date_entry = tk.Entry(info_frame, font=label_font)
 date_entry.grid(row=0, column=1, padx=10, pady=5)
 
-# name
+# Name
 name_label = tk.Label(info_frame, text="Name:", font=label_font)
 name_label.grid(row=1, column=0, padx=10, pady=5, sticky='w')
 name_entry = tk.Entry(info_frame, font=label_font)
@@ -442,15 +441,15 @@ year_number_entry.grid(row=4, column=1, padx=10, pady=5)
 
 # Section
 section_number_label = tk.Label(info_frame, text="Section:", font=label_font)
-section_number_label.grid(row=4, column=0, padx=10, pady=5, sticky='w')
+section_number_label.grid(row=5, column=0, padx=10, pady=5, sticky='w')
 section_number_entry = tk.Entry(info_frame, font=label_font)
-section_number_entry.grid(row=4, column=1, padx=10, pady=5)
+section_number_entry.grid(row=5, column=1, padx=10, pady=5)
 
 # Faculty
 faculty_number_label = tk.Label(info_frame, text="Faculty:", font=label_font)
-faculty_number_label.grid(row=4, column=0, padx=10, pady=5, sticky='w')
+faculty_number_label.grid(row=6, column=0, padx=10, pady=5, sticky='w')
 faculty_number_entry = tk.Entry(info_frame, font=label_font)
-faculty_number_entry.grid(row=4, column=1, padx=10, pady=5)
+faculty_number_entry.grid(row=6, column=1, padx=10, pady=5)
 
 error_label = tk.Label(root, text="", font=("Helvetica", 10, "bold", "italic"), foreground="red")
 error_label.pack(pady=10)
@@ -482,16 +481,7 @@ nfc_thread.start()
 update_time()
 
 # Start the Tkinter main loop
-
-
-
-
-Traceback (most recent call last):
-  File "/home/miko/Downloads/prolockv2/prolock_threading.py", line 476, in <module>
-    fetch_recent_logs()
-  File "/home/miko/Downloads/prolockv2/prolock_threading.py", line 297, in fetch_recent_logs
-    for i in logs_tree.get_children():
-NameError: name 'logs_tree' is not defined
+root.protocol("WM_DELETE_WINDOW", on_closing)
 root.mainloop()
 
 # Ensure threads are cleaned up properly
