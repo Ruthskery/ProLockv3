@@ -76,7 +76,7 @@ def add_table_entry(date, name, pc, student_number, year, section, faculty, time
 # Update the real-time date and time display
 def update_time():
     now = datetime.now()
-    current_time = now.strftime("%Y-%m-%d %H:%M:%S")
+    current_time = now.strftime("%A %d %B %Y %H:%M")
     time_label.config(text=f"Current Date and Time: {current_time}")
     root.after(1000, update_time)  # Update every second
 
@@ -85,7 +85,7 @@ root = tk.Tk()
 root.title("Fingerprint and NFC Reader")
 
 # Set up the layout
-root.geometry("700x500")
+root.geometry("1280x500")
 
 # Create a frame for the real-time date and time display
 time_frame = ttk.Frame(root, padding="10")
