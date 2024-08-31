@@ -79,9 +79,13 @@ root.title("Fingerprint and NFC Reader")
 # Set up the layout
 root.geometry("900x600")
 
+# Create a top frame to hold the fingerprint and NFC frames side by side
+top_frame = ttk.Frame(root, padding="10")
+top_frame.pack(side="top", fill="x")
+
 # Create a frame for the fingerprint sensor on the left
-left_frame = ttk.Frame(root, padding="10")
-left_frame.pack(side="left", fill="both", expand=True)
+left_frame = ttk.Frame(top_frame, padding="10")
+left_frame.pack(side="left", fill="y", expand=True)
 
 fingerprint_label = ttk.Label(left_frame, text="Fingerprint Sensor", font=("Arial", 16))
 fingerprint_label.pack(pady=20)
@@ -91,8 +95,8 @@ fingerprint_status_label = ttk.Label(left_frame, textvariable=fingerprint_status
 fingerprint_status_label.pack()
 
 # Create a frame for the NFC reader on the right
-right_frame = ttk.Frame(root, padding="10")
-right_frame.pack(side="right", fill="both", expand=True)
+right_frame = ttk.Frame(top_frame, padding="10")
+right_frame.pack(side="right", fill="y", expand=True)
 
 nfc_label = ttk.Label(right_frame, text="NFC Reader", font=("Arial", 16))
 nfc_label.pack(pady=20)
@@ -109,7 +113,7 @@ uid_display = tk.StringVar()
 uid_display_label = ttk.Label(right_frame, textvariable=uid_display, font=("Arial", 14))
 uid_display_label.pack()
 
-# Create a frame for the table
+# Create a frame for the table below the top frame
 table_frame = ttk.Frame(root, padding="10")
 table_frame.pack(side="bottom", fill="both", expand=True)
 
