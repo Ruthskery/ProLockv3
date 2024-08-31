@@ -342,17 +342,28 @@ def update_result(message):
     error_label.config(text=message)
 
 def read_nfc_loop():
+    def on_connect(tag):
+        # Extract and display the UID of the NFC tag
+        uid = tag.identifier.hex()
+        fetch_user_info(uid)  # Fetch user information using the UID
+
     try:
-        tag = clf.connect(rdwr={'on-connect': lambda tag: False})
-        if tag:
-            uid = tag.identifier.hex()
-            fetch_user_info(uid)
+        clf = nfc.ContactlessFrontend('usb')
+
+        while True:
+            # Wait until NFC is enabled by the fingerprint match
+            nfc_enabled.wait()  # Wait for the event to be set by the fingerprint match
+
+            clf.connect(rdwr={'on-connect': on_connect})
+
+            # Reset the event so the NFC task waits for the next fingerprint match
+            nfc_enabled.clear()  # Clear the event to pause the loop until re-enabled
+
+            time.sleep(1)  # Optional: Delay to prevent busy looping
+
     except Exception as e:
         print(f"Error: {e}")
-
-    # Schedule the function to run again after a short delay
-    root.after(1000, read_nfc_loop)
-
+       
 # Create the main Tkinter window
 root = tk.Tk()
 root.title("Fingerprint and NFC Reader")
@@ -481,15 +492,3 @@ root.mainloop()
 # Ensure threads are cleaned up properly
 fingerprint_thread.join()
 nfc_thread.join()
-
-
-
-Waiting for image...
-Templating...
-Waiting for image...
-Templating...
-Searching...
-Detected # 101 with confidence 87
-Error checking Time-In record: 404 Client Error: Not Found for url: https://prolocklogger.pro/api/recent-logs/by-fingerid?fingerprint_id=101
-Door unlocked.
-Door locked.
