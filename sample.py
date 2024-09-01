@@ -11,7 +11,7 @@ import requests
 
 # Global flags and settings
 nfc_enabled = threading.Event()
-is_in_timeout_mode = False  # Controls the state of fingerprint and NFC operations
+is_in_timeout_mode = False  # Initialize here to ensure it's available globally
 
 # API URLs for Fingerprint and NFC
 FINGERPRINT_API_URL = "https://prolocklogger.pro/api/getuserbyfingerprint/"
@@ -139,8 +139,9 @@ def auto_scan_fingerprint():
                 record_time_in_fingerprint(finger.finger_id, name)
                 unlock_door()
                 messagebox.showinfo("Welcome", f"Welcome, {name}! Door unlocked.")
-                nfc_enabled.set()  # Enable NFC scanning
+                nfc_enabled.set()
                 is_in_timeout_mode = True
+                root.after(15000, lock_door)
             else:
                 record_time_out_fingerprint(finger.finger_id)
                 lock_door()
@@ -160,8 +161,8 @@ except Exception as e:
     messagebox.showerror("NFC Error", f"Failed to initialize NFC reader: {e}")
     clf = None
 
-time_in_records = set()  # To track NFC time-ins
-time_out_records = set()  # To track NFC time-outs
+time_in_records = set()
+time_out_records = set()
 
 def fetch_recent_logs():
     try:
@@ -302,7 +303,6 @@ def read_nfc_loop():
                 if all_time_ins_accounted_for():
                     nfc_enabled.clear()  # Stop NFC loop
                     is_in_timeout_mode = False  # Reset to normal mode
-                    lock_door()  # Lock the door
                     root.after(5000, auto_scan_fingerprint)  # Restart fingerprint scanning after delay
 
             time.sleep(1)
