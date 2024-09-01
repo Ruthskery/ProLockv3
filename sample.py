@@ -56,7 +56,8 @@ def get_user_details(fingerprint_id):
         response = requests.get(f"{FINGERPRINT_API_URL}{fingerprint_id}")
         if response.status_code == 200:
             data = response.json()
-            return data.get('name', None)
+            if 'name' in data:
+                return data['name']
         messagebox.showerror("API Error", "Failed to fetch data from API.")
         return None
     except requests.RequestException as e:
