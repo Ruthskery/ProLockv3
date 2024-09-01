@@ -39,12 +39,6 @@ class AttendanceApp:
         # Define custom fonts
         heading_font = font.Font(family="Helvetica", size=16, weight="bold")
         label_font = font.Font(family="Helvetica", size=12)
-        clock_font = font.Font(family="Helvetica", size=14)
-
-        # Real-time date and time display
-        self.clock_label = tk.Label(root, font=clock_font)
-        self.clock_label.pack(pady=10)
-        self.update_clock()  # Initialize the clock
 
         # Create the main heading
         main_heading = tk.Label(root, text="Fingerprint and RFID Attendance System", font=heading_font)
@@ -117,11 +111,6 @@ class AttendanceApp:
         for col in columns:
             self.logs_tree.heading(col, text=col)
             self.logs_tree.column(col, minwidth=100, width=100, anchor='center')
-
-    def update_clock(self):
-        current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        self.clock_label.config(text=current_time)
-        self.root.after(1000, self.update_clock)  # Update every 1 second
 
     def initialize_serial(self):
         try:
@@ -342,7 +331,10 @@ class AttendanceApp:
 
     def record_time_in(self, rfid_number, user_name, year):
         try:
-            url = f"{TIME_IN_URL}?rfid_number={rfid_number}&time_in={datetime.now().strftime('%H:%M')}&year={year}&user_name={user_name}&role_id=3"
+            current_time_data = self.fetch_current_date_time()
+            if not current_time_data:
+                return
+            url = f"{TIME_IN_URL}?rfid_number={rfid_number}&time_in={current_time_data['current_time']}&year={year}&user_name={user_name}&role_id=3"
             response = requests.put(url)
             response.raise_for_status()
             print("Time-In recorded successfully.")
@@ -353,11 +345,14 @@ class AttendanceApp:
 
     def record_time_out(self, rfid_number):
         try:
+            current_time_data = self.fetch_current_date_time()
+            if not current_time_data:
+                return
             if not self.check_time_in_record(rfid_number):
                 self.update_result("No Time-In record found for this RFID. Cannot record Time-Out.")
                 return
 
-            url = f"{TIME_OUT_URL}?rfid_number={rfid_number}&time_out={datetime.now().strftime('%H:%M')}"
+            url = f"{TIME_OUT_URL}?rfid_number={rfid_number}&time_out={current_time_data['current_time']}"
             response = requests.put(url)
             response.raise_for_status()
             print("Time-Out recorded successfully.")
