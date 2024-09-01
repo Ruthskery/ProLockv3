@@ -166,8 +166,16 @@ def get_schedule(fingerprint_id):
         current_time_data = fetch_current_date_time()
         if not current_time_data:
             return False
-        current_day = current_time_data['day_of_week']
-        current_time = current_time_data['current_time']
+
+        # Extracting the day of the week and current time
+        current_day = current_time_data.get('day_of_week')
+        current_time = current_time_data.get('current_time')
+
+        if not current_day or not current_time:
+            print("Error: Invalid response from current date-time API.")
+            return False
+
+        print(f"Current Day: {current_day}, Current Time: {current_time}")
 
         # Fetch the lab schedule for the given fingerprint ID
         response = requests.get(f"{LAB_SCHEDULE_URL}{fingerprint_id}")
@@ -176,12 +184,20 @@ def get_schedule(fingerprint_id):
 
         # Check if the current time is within any of the schedules for today
         for schedule in schedules:
-            if schedule['day_of_the_week'] == current_day:
-                start_time = schedule['class_start']
-                end_time = schedule['class_end']
-                if start_time <= current_time <= end_time:
+            schedule_day = schedule.get('day_of_the_week')
+            start_time = schedule.get('class_start')
+            end_time = schedule.get('class_end')
+
+            # Ensure all required fields are available
+            if schedule_day and start_time and end_time:
+                print(f"Checking Schedule: {schedule_day}, Start: {start_time}, End: {end_time}")
+
+                # Compare the current day and time against the schedule
+                if schedule_day == current_day and start_time <= current_time <= end_time:
+                    print("Access allowed based on schedule.")
                     return True  # Schedule matches, allow access
 
+        print("Access denied: No matching schedule found or not within allowed time.")
         return False  # No matching schedule or not within allowed time
     except requests.RequestException as e:
         messagebox.showerror("Request Error", f"Failed to connect to API: {e}")
