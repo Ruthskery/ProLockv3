@@ -245,21 +245,21 @@ def auto_scan_fingerprint():
                 record_time_in_fingerprint(finger.finger_id, name)
                 unlock_door()
                 messagebox.showinfo("Welcome", f"Welcome, {name}! Door unlocked.")
-                # Enable NFC scanning and wait for RFID handling
-                nfc_enabled.set()  # Enable NFC scanning
-                nfc_enabled.wait()  # Block until NFC processing is done
+                # Enable NFC scanning
+                nfc_enabled.set()  # Allow NFC scanning to proceed
             else:
                 # If a Time-In exists, record Time-Out and lock the door
                 record_time_out_fingerprint(finger.finger_id)
                 lock_door()
                 messagebox.showinfo("Goodbye", f"Goodbye, {name}! Door locked.")
+                # Stop NFC scanning as the session is complete
+                nfc_enabled.clear()  # Ensure NFC scanning stops after a Time-Out
         else:
             messagebox.showinfo("No Access", "Access denied due to schedule restrictions.")
     else:
         messagebox.showinfo("No Match", "No matching fingerprint found in the database.")
 
-    # Reset event and continue scanning
-    nfc_enabled.clear()
+    # Continue scanning fingerprints after processing
     root.after(5000, auto_scan_fingerprint)  # Restart fingerprint scanning after NFC loop
 
 # Initialize NFC frontend
@@ -362,18 +362,17 @@ def read_nfc_loop():
     try:
         while True:
             # Wait for the event triggered by fingerprint match
-            nfc_enabled.wait()  # Ensure NFC scanning starts only after a fingerprint match
+            nfc_enabled.wait()  # Ensure NFC scanning starts only when enabled
 
-            if clf:
+            if clf and nfc_enabled.is_set():
                 try:
                     clf.connect(rdwr={'on-connect': on_connect})
-                    # Clear the NFC event after processing
-                    nfc_enabled.clear()
                 except Exception as e:
                     print(f"NFC read error: {e}")
                     time.sleep(1)  # Delay to prevent excessive error logging
 
-            time.sleep(1)  # Add a short delay to control loop execution
+            # Add a small delay to avoid busy-waiting
+            time.sleep(0.1)
     except Exception as e:
         print(f"NFC Loop Error: {e}")
 
