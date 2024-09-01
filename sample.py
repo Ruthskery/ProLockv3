@@ -79,7 +79,6 @@ def fetch_current_date_time():
 
         # Validate the API response contains the necessary fields
         if 'day_of_week' in data and 'current_time' in data:
-            print(f"Fetched from API - Day: {data['day_of_week']}, Time: {data['current_time']}")
             return data
         else:
             print("Error: Missing expected keys in the API response.")
@@ -218,7 +217,7 @@ def auto_scan_fingerprint():
     if not finger:
         return
 
-    print("Waiting for image...")
+    print("Waiting for fingerprint image...")
     while finger.get_image() != adafruit_fingerprint.OK:
         pass
 
@@ -227,13 +226,14 @@ def auto_scan_fingerprint():
         messagebox.showwarning("Error", "Failed to template the fingerprint image.")
         root.after(5000, auto_scan_fingerprint)  # Retry after 5 seconds
         return
+
     print("Searching...")
     if finger.finger_search() != adafruit_fingerprint.OK:
         messagebox.showwarning("Error", "Failed to search for fingerprint match.")
         root.after(5000, auto_scan_fingerprint)  # Retry after 5 seconds
         return
 
-    print("Detected #", finger.finger_id, "with confidence", finger.confidence)
+    print("Detected fingerprint ID:", finger.finger_id, "with confidence", finger.confidence)
 
     # Fetch user details using API
     name = get_user_details(finger.finger_id)
@@ -244,12 +244,12 @@ def auto_scan_fingerprint():
                 # Record Time-In, unlock door, and transition to RFID scanning
                 record_time_in_fingerprint(finger.finger_id, name)
                 unlock_door()
-                nfc_enabled.set()  # Enable NFC scanning
                 messagebox.showinfo("Welcome", f"Welcome, {name}! Door unlocked.")
-                # Wait for NFC processing to finish
-                nfc_enabled.wait()
+                # Enable NFC scanning and wait for RFID handling
+                nfc_enabled.set()  # Enable NFC scanning
+                nfc_enabled.wait()  # Block until NFC processing is done
             else:
-                # Record Time-Out and lock door
+                # If a Time-In exists, record Time-Out and lock the door
                 record_time_out_fingerprint(finger.finger_id)
                 lock_door()
                 messagebox.showinfo("Goodbye", f"Goodbye, {name}! Door locked.")
@@ -261,7 +261,6 @@ def auto_scan_fingerprint():
     # Reset event and continue scanning
     nfc_enabled.clear()
     root.after(5000, auto_scan_fingerprint)  # Restart fingerprint scanning after NFC loop
-
 
 # Initialize NFC frontend
 try:
@@ -357,28 +356,26 @@ def update_result(message):
 def read_nfc_loop():
     def on_connect(tag):
         uid = tag.identifier.hex()
-        fetch_user_info(uid)
+        fetch_user_info(uid)  # This function handles time-in and time-out based on RFID scans
         return True
 
     try:
         while True:
             # Wait for the event triggered by fingerprint match
-            nfc_enabled.wait()  # This line ensures NFC scanning starts after a fingerprint match
+            nfc_enabled.wait()  # Ensure NFC scanning starts only after a fingerprint match
 
             if clf:
                 try:
                     clf.connect(rdwr={'on-connect': on_connect})
-                    # NFC reading successful, clear the event
+                    # Clear the NFC event after processing
                     nfc_enabled.clear()
                 except Exception as e:
                     print(f"NFC read error: {e}")
                     time.sleep(1)  # Delay to prevent excessive error logging
 
-            time.sleep(1)
-
+            time.sleep(1)  # Add a short delay to control loop execution
     except Exception as e:
         print(f"NFC Loop Error: {e}")
-
 
 # Create the main Tkinter window
 root = tk.Tk()
