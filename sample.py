@@ -358,3 +358,28 @@ fetch_recent_logs()
 
 # Start the Tkinter main loop
 root.mainloop()
+
+
+
+
+
+NFC read error: main thread is not in main loop
+Exception in thread Thread-1 (auto_scan_fingerprint):
+Traceback (most recent call last):
+  File "/usr/lib/python3.11/threading.py", line 1038, in _bootstrap_inner
+    self.run()
+  File "/usr/lib/python3.11/threading.py", line 975, in run
+    self._target(*self._args, **self._kwargs)
+  File "/home/miko/Downloads/prolockv2/prolock_threading.py", line 139, in auto_scan_fingerprint
+    messagebox.showwarning("Error", "Failed to search for fingerprint match.")
+  File "/usr/lib/python3.11/tkinter/messagebox.py", line 93, in showwarning
+    return _show(title, message, WARNING, OK, **options)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.11/tkinter/messagebox.py", line 76, in _show
+    res = Message(**options).show()
+          ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.11/tkinter/commondialog.py", line 45, in show
+    s = master.tk.call(self.command, *master._options(self.options))
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+RuntimeError: main thread is not in main loop
+NFC read error: main thread is not in main loop
