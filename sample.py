@@ -7,6 +7,7 @@ import tkinter as tk
 from tkinter import ttk, font, messagebox
 import RPi.GPIO as GPIO
 import requests
+from datetime import datetime, timedelta
 
 # API URLs for Fingerprint, NFC, and Current Date-Time
 FINGERPRINT_API_URL = "https://prolocklogger.pro/api/getuserbyfingerprint/"
@@ -90,6 +91,9 @@ class AttendanceApp:
         # Start fingerprint scanning in a separate thread
         self.fingerprint_thread = threading.Thread(target=self.auto_scan_fingerprint)
         self.fingerprint_thread.start()
+
+        # Track the last time-in for each user by UID
+        self.last_time_in = {}
 
         # Handle window close event
         self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
@@ -302,10 +306,25 @@ class AttendanceApp:
 
             self.error_label.config(text="")
 
+            # Track the last time-in for this UID
+            current_time_data = self.fetch_current_date_time()
+            if not current_time_data:
+                return
+
+            current_time = datetime.strptime(current_time_data['current_time'], "%H:%M")
+
+            # Check if the user is attempting to time-out within 5 minutes of time-in
+            if uid in self.last_time_in:
+                time_in_time = self.last_time_in[uid]
+                if current_time - time_in_time < timedelta(minutes=5):
+                    self.update_result("Cannot record Time-Out within 5 minutes of Time-In.")
+                    return
+
             if self.check_time_in_record(uid):
                 self.record_time_out(uid)
             else:
                 self.record_time_in(uid, data.get('user_name', 'None'), data.get('year', 'None'))
+                self.last_time_in[uid] = current_time  # Update the last time-in time
 
         except requests.HTTPError as http_err:
             if response.status_code == 404:
