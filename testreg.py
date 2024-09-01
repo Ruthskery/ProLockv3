@@ -201,4 +201,3 @@ center_window(root, 700, 500)
 
 # Run the Tkinter event loop
 root.mainloop()
-
