@@ -7,7 +7,6 @@ import tkinter as tk
 from tkinter import ttk, font, messagebox
 import RPi.GPIO as GPIO
 import requests
-from datetime import datetime
 
 # API URLs for Fingerprint, NFC, and Current Date-Time
 FINGERPRINT_API_URL = "https://prolocklogger.pro/api/getuserbyfingerprint/"
@@ -21,7 +20,7 @@ TIME_IN_URL = 'https://prolocklogger.pro/api/logs/time-in'
 TIME_OUT_URL = 'https://prolocklogger.pro/api/logs/time-out'
 RECENT_LOGS_URL2 = 'https://prolocklogger.pro/api/recent-logs/by-uid'
 CURRENT_DATE_TIME_URL = 'https://prolocklogger.pro/api/current-date-time'
-LAB_SCHEDULE_URL = 'https://prolocklogger.pro/api/lab-schedules/fingerprint/'  # Added for schedule check
+LAB_SCHEDULE_URL = 'https://prolocklogger.pro/api/lab-schedules/fingerprint/'
 
 # GPIO pin configuration for the solenoid lock
 SOLENOID_PIN = 17
@@ -82,11 +81,8 @@ class AttendanceApp:
             self.clf = None
 
         self.running = True
-        self.thread = threading.Thread(target=self.read_nfc_loop)
-        self.thread.start()
-
-        # Handle window close event
-        self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
+        self.nfc_thread = threading.Thread(target=self.read_nfc_loop)
+        self.nfc_thread.start()
 
         # Initialize serial connection for fingerprint sensor
         self.finger = self.initialize_serial()
@@ -94,6 +90,9 @@ class AttendanceApp:
         # Start fingerprint scanning in a separate thread
         self.fingerprint_thread = threading.Thread(target=self.auto_scan_fingerprint)
         self.fingerprint_thread.start()
+
+        # Handle window close event
+        self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
 
     def create_label_entry(self, frame, text, font_style):
         label = ttk.Label(frame, text=text, font=font_style)
@@ -143,7 +142,7 @@ class AttendanceApp:
         try:
             response = requests.get(CURRENT_DATE_TIME_URL)
             response.raise_for_status()
-            data = response.json()  # Expected response: {'day_of_week': 'Sunday', 'date': '01', 'year': '2024', 'month': 'September', 'current_time': '17:04'}
+            data = response.json()
             if 'day_of_week' in data and 'current_time' in data:
                 return data
             else:
@@ -230,46 +229,45 @@ class AttendanceApp:
             print(f"Error recording Time-Out: {e}")
 
     def auto_scan_fingerprint(self):
-        if not self.finger:
-            return
+        while self.running:
+            if not self.finger:
+                return
 
-        print("Waiting for fingerprint image...")
-        while self.finger.get_image() != adafruit_fingerprint.OK:
-            pass
+            print("Waiting for fingerprint image...")
+            while self.finger.get_image() != adafruit_fingerprint.OK:
+                if not self.running:
+                    return
+                time.sleep(0.5)
 
-        print("Templating...")
-        if self.finger.image_2_tz(1) != adafruit_fingerprint.OK:
-            messagebox.showwarning("Error", "Failed to template the fingerprint image.")
-            self.root.after(5000, self.auto_scan_fingerprint)  # Retry after 5 seconds
-            return
+            print("Templating...")
+            if self.finger.image_2_tz(1) != adafruit_fingerprint.OK:
+                messagebox.showwarning("Error", "Failed to template the fingerprint image.")
+                continue
 
-        print("Searching...")
-        if self.finger.finger_search() != adafruit_fingerprint.OK:
-            messagebox.showwarning("Error", "Failed to search for fingerprint match.")
-            self.root.after(5000, self.auto_scan_fingerprint)  # Retry after 5 seconds
-            return
+            print("Searching...")
+            if self.finger.finger_search() != adafruit_fingerprint.OK:
+                messagebox.showwarning("Error", "Failed to search for fingerprint match.")
+                continue
 
-        print("Detected fingerprint ID:", self.finger.finger_id, "with confidence", self.finger.confidence)
+            print("Detected fingerprint ID:", self.finger.finger_id, "with confidence", self.finger.confidence)
 
-        # Fetch user details using API
-        name = self.get_user_details(self.finger.finger_id)
+            # Fetch user details using API
+            name = self.get_user_details(self.finger.finger_id)
 
-        if name:
-            if self.get_schedule(self.finger.finger_id):  # Check if the current time is within the allowed schedule
-                if not self.check_time_in_record_fingerprint(self.finger.finger_id):
-                    self.record_time_in_fingerprint(self.finger.finger_id, name)
-                    self.unlock_door()
-                    messagebox.showinfo("Welcome", f"Welcome, {name}! Door unlocked.")
+            if name:
+                if self.get_schedule(self.finger.finger_id):  # Check if the current time is within the allowed schedule
+                    if not self.check_time_in_record_fingerprint(self.finger.finger_id):
+                        self.record_time_in_fingerprint(self.finger.finger_id, name)
+                        self.unlock_door()
+                        messagebox.showinfo("Welcome", f"Welcome, {name}! Door unlocked.")
+                    else:
+                        self.record_time_out_fingerprint(self.finger.finger_id)
+                        self.lock_door()
+                        messagebox.showinfo("Goodbye", f"Goodbye, {name}! Door locked.")
                 else:
-                    self.record_time_out_fingerprint(self.finger.finger_id)
-                    self.lock_door()
-                    messagebox.showinfo("Goodbye", f"Goodbye, {name}! Door locked.")
+                    messagebox.showinfo("No Access", "Access denied due to schedule restrictions.")
             else:
-                messagebox.showinfo("No Access", "Access denied due to schedule restrictions.")
-        else:
-            messagebox.showinfo("No Match", "No matching fingerprint found in the database.")
-
-        self.root.after(5000, self.auto_scan_fingerprint)  # Restart fingerprint scanning after NFC loop
+                messagebox.showinfo("No Match", "No matching fingerprint found in the database.")
 
     def read_nfc_loop(self):
         while self.running:
@@ -395,8 +393,8 @@ class AttendanceApp:
 
     def on_closing(self):
         self.running = False
-        if self.thread.is_alive():
-            self.thread.join()
+        if self.nfc_thread.is_alive():
+            self.nfc_thread.join()
         if self.fingerprint_thread.is_alive():
             self.fingerprint_thread.join()
         if self.clf is not None:
