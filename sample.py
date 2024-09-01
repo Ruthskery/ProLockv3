@@ -76,11 +76,11 @@ def fetch_current_date_time():
     try:
         response = requests.get(CURRENT_DATE_TIME_URL)
         response.raise_for_status()
-        return response.json()  # Returns the current date and time data
+        data = response.json()  # Expected: {'day_of_week': 'Monday', 'current_time': '14:30:00'}
+        return data
     except requests.RequestException as e:
         print(f"Error fetching current date and time: {e}")
         return None
-
 
 def check_time_in_record_fingerprint(fingerprint_id):
     try:
@@ -167,7 +167,7 @@ def get_schedule(fingerprint_id):
         if not current_time_data:
             return False
 
-        # Extracting the day of the week and current time
+        # Extracting the current day and time
         current_day = current_time_data.get('day_of_week')
         current_time = current_time_data.get('current_time')
 
@@ -190,19 +190,21 @@ def get_schedule(fingerprint_id):
 
             # Ensure all required fields are available
             if schedule_day and start_time and end_time:
-                print(f"Checking Schedule: {schedule_day}, Start: {start_time}, End: {end_time}")
+                print(f"Checking Schedule: Day: {schedule_day}, Start: {start_time}, End: {end_time}")
 
-                # Compare the current day and time against the schedule
-                if schedule_day == current_day and start_time <= current_time <= end_time:
-                    print("Access allowed based on schedule.")
-                    return True  # Schedule matches, allow access
+                # Check if current day matches the schedule day
+                if schedule_day == current_day:
+                    # Compare current time with class start and end times
+                    if start_time <= current_time <= end_time:
+                        print("Access allowed based on schedule.")
+                        return True  # Schedule matches, allow access
 
         print("Access denied: No matching schedule found or not within allowed time.")
         return False  # No matching schedule or not within allowed time
     except requests.RequestException as e:
         messagebox.showerror("Request Error", f"Failed to connect to API: {e}")
         return False
-
+    
 def auto_scan_fingerprint():
     global unlock_attempt
 
