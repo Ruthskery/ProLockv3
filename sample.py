@@ -11,9 +11,9 @@ import requests
 
 # Global flags and settings
 nfc_enabled = threading.Event()
-is_in_timeout_mode = False  # Initialize here to ensure it's available globally
+door_unlocked = False  # Tracks the door's state
 
-# API URLs for Fingerprint and NFC
+# API URLs for Fingerprint, NFC, and Current Date-Time
 FINGERPRINT_API_URL = "https://prolocklogger.pro/api/getuserbyfingerprint/"
 TIME_IN_FINGERPRINT_URL = "https://prolocklogger.pro/api/logs/time-in/fingerprint"
 TIME_OUT_FINGERPRINT_URL = "https://prolocklogger.pro/api/logs/time-out/fingerprint"
@@ -24,6 +24,7 @@ RECENT_LOGS_URL = 'https://prolocklogger.pro/api/recent-logs'
 TIME_IN_URL = 'https://prolocklogger.pro/api/logs/time-in'
 TIME_OUT_URL = 'https://prolocklogger.pro/api/logs/time-out'
 RECENT_LOGS_URL2 = 'https://prolocklogger.pro/api/recent-logs/by-uid'
+CURRENT_DATE_TIME_URL = 'https://prolocklogger.pro/api/current-date-time'
 
 # GPIO pin configuration for the solenoid lock
 SOLENOID_PIN = 17
@@ -54,13 +55,11 @@ def lock_door():
 def get_user_details(fingerprint_id):
     try:
         response = requests.get(f"{FINGERPRINT_API_URL}{fingerprint_id}")
-        response.raise_for_status()
-        data = response.json()
-        if 'name' in data:
-            return data['name']
-        else:
-            messagebox.showerror("API Error", "Failed to fetch data from API.")
-            return None
+        if response.status_code == 200:
+            data = response.json()
+            return data.get('name', None)
+        messagebox.showerror("API Error", "Failed to fetch data from API.")
+        return None
     except requests.RequestException as e:
         messagebox.showerror("Request Error", f"Failed to connect to API: {e}")
         return None
@@ -111,7 +110,7 @@ def get_schedule(fingerprint_id):
         return False
 
 def auto_scan_fingerprint():
-    global is_in_timeout_mode
+    global door_unlocked
 
     if not finger:
         return
@@ -134,28 +133,25 @@ def auto_scan_fingerprint():
 
     print(f"Detected #{finger.finger_id} with confidence {finger.confidence}")
     name = get_user_details(finger.finger_id)
-    print(name)
 
     if name:
-        if get_schedule(finger.finger_id):
-            if not check_time_in_record_fingerprint(finger.finger_id):
-                record_time_in_fingerprint(finger.finger_id, name)
-                unlock_door()
-                messagebox.showinfo("Welcome", f"Welcome, {name}! Door unlocked.")
-                nfc_enabled.set()
-                is_in_timeout_mode = True
-                root.after(15000, lock_door)
-            else:
-                record_time_out_fingerprint(finger.finger_id)
-                lock_door()
-                messagebox.showinfo("Goodbye", f"Goodbye, {name}! Door locked.")
-                if all_time_ins_accounted_for():
-                    is_in_timeout_mode = False
-                root.after(5000, auto_scan_fingerprint)
+        if door_unlocked:
+            # If the door is already unlocked, lock it upon matching fingerprint again
+            lock_door()
+            door_unlocked = False
+            messagebox.showinfo("Locking", "Fingerprint matched again. Door locked.")
+            nfc_enabled.clear()  # Disable NFC scanning
         else:
-            root.after(5000, auto_scan_fingerprint)
+            # Unlock door and start NFC scanning
+            unlock_door()
+            door_unlocked = True
+            messagebox.showinfo("Welcome", f"Welcome, {name}! Door unlocked.")
+            nfc_enabled.set()  # Enable NFC scanning
     else:
         messagebox.showinfo("No Match", "No matching fingerprint found in the database.")
+    
+    # Continue fingerprint scanning
+    root.after(5000, auto_scan_fingerprint)
 
 # Initialize NFC frontend
 try:
@@ -163,9 +159,6 @@ try:
 except Exception as e:
     messagebox.showerror("NFC Error", f"Failed to initialize NFC reader: {e}")
     clf = None
-
-time_in_records = set()
-time_out_records = set()
 
 def fetch_recent_logs():
     try:
@@ -215,7 +208,6 @@ def fetch_user_info(uid):
         else:
             record_time_in(uid, data.get('user_name', 'None'), data.get('year', 'None'))
 
-        update_records(uid)
     except requests.HTTPError as http_err:
         if response.status_code == 404:
             clear_data()
@@ -224,15 +216,6 @@ def fetch_user_info(uid):
             update_result(f"HTTP error occurred: {http_err}")
     except requests.RequestException as e:
         update_result(f"Error fetching user info: {e}")
-
-def update_records(uid):
-    if check_time_in_record(uid):
-        time_in_records.add(uid)
-    else:
-        time_out_records.add(uid)
-
-def all_time_ins_accounted_for():
-    return time_in_records == time_out_records
 
 def check_time_in_record(rfid_number):
     try:
@@ -283,8 +266,6 @@ def update_result(message):
     error_label.config(text=message)
 
 def read_nfc_loop():
-    global is_in_timeout_mode  # Declare the variable as global to ensure proper access
-
     def on_connect(tag):
         uid = tag.identifier.hex()
         fetch_user_info(uid)
@@ -295,23 +276,28 @@ def read_nfc_loop():
             # Wait for the event triggered by fingerprint match
             nfc_enabled.wait()
 
-            if clf and is_in_timeout_mode:
+            if clf and door_unlocked:
                 try:
                     clf.connect(rdwr={'on-connect': on_connect})
                 except Exception as e:
                     print(f"NFC read error: {e}")
                     time.sleep(1)  # Delay to prevent excessive error logging
 
-                # Check if all time-ins are accounted for as time-outs
-                if all_time_ins_accounted_for():
-                    nfc_enabled.clear()  # Stop NFC loop
-                    is_in_timeout_mode = False  # Reset to normal mode
-                    root.after(5000, auto_scan_fingerprint)  # Restart fingerprint scanning after delay
-
             time.sleep(1)
 
     except Exception as e:
         print(f"NFC Loop Error: {e}")
+
+def fetch_current_date_time():
+    """Fetches the current date and time from the API and updates the time display."""
+    try:
+        response = requests.get(CURRENT_DATE_TIME_URL)
+        response.raise_for_status()
+        data = response.json()
+        current_time = f"{data['day_of_week']}, {data['month']} {data['date']}, {data['year']} {data['current_time']}"
+        time_label.config(text=current_time)
+    except requests.RequestException as e:
+        print(f"Error fetching current date and time: {e}")
 
 # Create the main Tkinter window
 root = tk.Tk()
@@ -325,10 +311,8 @@ time_label = ttk.Label(time_frame, text="", font=("Arial", 14))
 time_label.pack()
 
 def update_time():
-    now = datetime.now()
-    current_time = now.strftime("%A %d %m %Y %H:%M")
-    time_label.config(text=f"{current_time}")
-    root.after(1000, update_time)
+    fetch_current_date_time()  # Fetch and update the current date and time from the API
+    root.after(10000, update_time)  # Update every 10 seconds
 
 update_time()
 
