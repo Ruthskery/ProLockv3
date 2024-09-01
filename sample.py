@@ -241,19 +241,15 @@ def auto_scan_fingerprint():
     if name:
         if get_schedule(finger.finger_id):  # Check if the current time is within the allowed schedule
             if not check_time_in_record_fingerprint(finger.finger_id):
-                # Record Time-In, unlock door, and transition to RFID scanning
+                # Record Time-In, unlock door
                 record_time_in_fingerprint(finger.finger_id, name)
                 unlock_door()
                 messagebox.showinfo("Welcome", f"Welcome, {name}! Door unlocked.")
-                # Enable NFC scanning
-                nfc_enabled.set()  # Allow NFC scanning to proceed
             else:
                 # If a Time-In exists, record Time-Out and lock the door
                 record_time_out_fingerprint(finger.finger_id)
                 lock_door()
                 messagebox.showinfo("Goodbye", f"Goodbye, {name}! Door locked.")
-                # Stop NFC scanning as the session is complete
-                nfc_enabled.clear()  # Ensure NFC scanning stops after a Time-Out
         else:
             messagebox.showinfo("No Access", "Access denied due to schedule restrictions.")
     else:
@@ -361,10 +357,7 @@ def read_nfc_loop():
 
     try:
         while True:
-            # Wait for the event triggered by fingerprint match
-            nfc_enabled.wait()  # Ensure NFC scanning starts only when enabled
-
-            if clf and nfc_enabled.is_set():
+            if clf:
                 try:
                     clf.connect(rdwr={'on-connect': on_connect})
                 except Exception as e:
@@ -447,6 +440,7 @@ for col in columns:
 # Start fingerprint and NFC threads
 fingerprint_thread = threading.Thread(target=auto_scan_fingerprint)
 nfc_thread = threading.Thread(target=read_nfc_loop)
+
 fingerprint_thread.start()
 nfc_thread.start()
 
