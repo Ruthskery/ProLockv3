@@ -76,7 +76,8 @@ def fetch_current_date_time():
     try:
         response = requests.get(CURRENT_DATE_TIME_URL)
         response.raise_for_status()
-        data = response.json()  # Expected: {'day_of_week': 'Monday', 'current_time': '14:30:00'}
+        data = response.json()  # Expected response: {'day_of_week': 'Sunday', 'date': '01', 'year': '2024', 'month': 'September', 'current_time': '17:04'}
+        # Ensure all necessary keys are present
         if 'day_of_week' in data and 'current_time' in data:
             return data
         else:
