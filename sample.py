@@ -11,7 +11,7 @@ import requests
 
 # Global flags and settings
 nfc_enabled = threading.Event()
-door_unlocked = False  # Tracks the door's state
+unlock_attempt = True
 
 # API URLs for Fingerprint, NFC, and Current Date-Time
 FINGERPRINT_API_URL = "https://prolocklogger.pro/api/getuserbyfingerprint/"
@@ -187,9 +187,8 @@ def get_schedule(fingerprint_id):
         messagebox.showerror("Request Error", f"Failed to connect to API: {e}")
         return False
 
-
 def auto_scan_fingerprint():
-    global door_unlocked
+    global unlock_attempt
 
     if not finger:
         return
@@ -201,39 +200,42 @@ def auto_scan_fingerprint():
     print("Templating...")
     if finger.image_2_tz(1) != adafruit_fingerprint.OK:
         messagebox.showwarning("Error", "Failed to template the fingerprint image.")
-        root.after(5000, auto_scan_fingerprint)
+        root.after(5000, auto_scan_fingerprint)  # Retry after 5 seconds
         return
-
     print("Searching...")
     if finger.finger_search() != adafruit_fingerprint.OK:
         messagebox.showwarning("Error", "Failed to search for fingerprint match.")
-        root.after(5000, auto_scan_fingerprint)
+        root.after(5000, auto_scan_fingerprint)  # Retry after 5 seconds
         return
 
-    print(f"Detected #{finger.finger_id} with confidence {finger.confidence}")
+    print("Detected #", finger.finger_id, "with confidence", finger.confidence)
+
+    # Fetch user details using API
     name = get_user_details(finger.finger_id)
 
     if name:
-        if door_unlocked:
-            # If the door is already unlocked, lock it upon matching fingerprint again
-            lock_door()
-            door_unlocked = False
-            messagebox.showinfo("Locking", "Fingerprint matched again. Door locked.")
-            nfc_enabled.clear()  # Disable NFC scanning
-        else:
-            # Check if the current time is within the allowed schedule
-            if get_schedule(finger.finger_id):
+        if get_schedule(finger.finger_id):  # Check if the current time is within the allowed schedule
+            if not check_time_in_record_fingerprint(finger.finger_id):
+                # Record Time-In, unlock door, and transition to RFID scanning
+                record_time_in_fingerprint(finger.finger_id, name)
                 unlock_door()
-                door_unlocked = True
-                messagebox.showinfo("Welcome", f"Welcome, {name}! Door unlocked.")
                 nfc_enabled.set()  # Enable NFC scanning
+                messagebox.showinfo("Welcome", f"Welcome, {name}! Door unlocked.")
+                # Wait for NFC processing to finish
+                nfc_enabled.wait()
             else:
-                messagebox.showinfo("Access Denied", "Current time is not within the allowed schedule.")
+                # Record Time-Out and lock door
+                record_time_out_fingerprint(finger.finger_id)
+                lock_door()
+                messagebox.showinfo("Goodbye", f"Goodbye, {name}! Door locked.")
+        else:
+            messagebox.showinfo("No Access", "Access denied due to schedule restrictions.")
     else:
         messagebox.showinfo("No Match", "No matching fingerprint found in the database.")
 
-    # Continue fingerprint scanning
-    root.after(5000, auto_scan_fingerprint)
+    # Reset event and continue scanning
+    nfc_enabled.clear()
+    root.after(5000, auto_scan_fingerprint)  # Restart fingerprint scanning after NFC loop
 
 
 # Initialize NFC frontend
@@ -336,11 +338,13 @@ def read_nfc_loop():
     try:
         while True:
             # Wait for the event triggered by fingerprint match
-            nfc_enabled.wait()
+            nfc_enabled.wait()  # This line ensures NFC scanning starts after a fingerprint match
 
-            if clf and door_unlocked:
+            if clf:
                 try:
                     clf.connect(rdwr={'on-connect': on_connect})
+                    # NFC reading successful, clear the event
+                    nfc_enabled.clear()
                 except Exception as e:
                     print(f"NFC read error: {e}")
                     time.sleep(1)  # Delay to prevent excessive error logging
