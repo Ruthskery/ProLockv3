@@ -77,7 +77,11 @@ def fetch_current_date_time():
         response = requests.get(CURRENT_DATE_TIME_URL)
         response.raise_for_status()
         data = response.json()  # Expected: {'day_of_week': 'Monday', 'current_time': '14:30:00'}
-        return data
+        if 'day_of_week' in data and 'current_time' in data:
+            return data
+        else:
+            print("Error: Missing expected keys in the API response.")
+            return None
     except requests.RequestException as e:
         print(f"Error fetching current date and time: {e}")
         return None
@@ -165,9 +169,10 @@ def get_schedule(fingerprint_id):
         # Fetch current date and time from the API
         current_time_data = fetch_current_date_time()
         if not current_time_data:
+            print("Error: Could not fetch current date and time from API.")
             return False
 
-        # Extracting the current day and time
+        # Extract the current day and time
         current_day = current_time_data.get('day_of_week')
         current_time = current_time_data.get('current_time')
 
@@ -175,7 +180,7 @@ def get_schedule(fingerprint_id):
             print("Error: Invalid response from current date-time API.")
             return False
 
-        print(f"Current Day: {current_day}, Current Time: {current_time}")
+        print(f"Current Day from API: {current_day}, Current Time from API: {current_time}")
 
         # Fetch the lab schedule for the given fingerprint ID
         response = requests.get(f"{LAB_SCHEDULE_URL}{fingerprint_id}")
@@ -204,7 +209,7 @@ def get_schedule(fingerprint_id):
     except requests.RequestException as e:
         messagebox.showerror("Request Error", f"Failed to connect to API: {e}")
         return False
-    
+
 def auto_scan_fingerprint():
     global unlock_attempt
 
