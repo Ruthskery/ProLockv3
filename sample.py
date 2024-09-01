@@ -53,13 +53,14 @@ def lock_door():
 
 def get_user_details(fingerprint_id):
     try:
-        response = requests.get(f"{api_url}{fingerprint_id}")
-        if response.status_code == 200:
-            data = response.json()
-            if 'name' in data:
-                return data['name']
-        messagebox.showerror("API Error", "Failed to fetch data from API.")
-        return None
+        response = requests.get(f"{FINGERPRINT_API_URL}{fingerprint_id}")
+        response.raise_for_status()
+        data = response.json()
+        if 'name' in data:
+            return data['name']
+        else:
+            messagebox.showerror("API Error", "Failed to fetch data from API.")
+            return None
     except requests.RequestException as e:
         messagebox.showerror("Request Error", f"Failed to connect to API: {e}")
         return None
