@@ -5,7 +5,6 @@ import adafruit_fingerprint
 import nfc
 import tkinter as tk
 from tkinter import ttk, font, messagebox
-from datetime import datetime
 import RPi.GPIO as GPIO
 import requests
 
@@ -77,14 +76,16 @@ def fetch_current_date_time():
         response = requests.get(CURRENT_DATE_TIME_URL)
         response.raise_for_status()
         data = response.json()  # Expected response: {'day_of_week': 'Sunday', 'date': '01', 'year': '2024', 'month': 'September', 'current_time': '17:04'}
-        # Ensure all necessary keys are present
+
+        # Validate the API response contains the necessary fields
         if 'day_of_week' in data and 'current_time' in data:
+            print(f"Fetched from API - Day: {data['day_of_week']}, Time: {data['current_time']}")
             return data
         else:
             print("Error: Missing expected keys in the API response.")
             return None
     except requests.RequestException as e:
-        print(f"Error fetching current date and time: {e}")
+        print(f"Error fetching current date and time from API: {e}")
         return None
 
 def check_time_in_record_fingerprint(fingerprint_id):
