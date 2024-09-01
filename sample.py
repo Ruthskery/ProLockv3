@@ -354,15 +354,19 @@ def read_nfc_loop():
         fetch_user_info(uid)  # Function to handle user info based on the NFC tag read
         return True
 
+    first_run = True
     while True:
         if clf:
             try:
-                print("Waiting for NFC tag...")
+                if first_run:
+                    print("Waiting for NFC tag...")  # Print only once or when re-initialized
+                    first_run = False
                 clf.connect(rdwr={'on-connect': on_connect})
             except Exception as e:
                 print(f"NFC read error: {e}")
+                first_run = True  # Reset to print the message again when an error occurs
                 time.sleep(1)  # Delay to prevent rapid error logging
-        time.sleep(0.1)  # Short delay to reduce CPU usage
+        time.sleep(0.5)  # Short delay to reduce CPU usage and control message frequency
 
 # Create the main Tkinter window
 root = tk.Tk()
