@@ -9,6 +9,7 @@ import RPi.GPIO as GPIO
 import requests
 
 # Global flags and settings
+nfc_enabled = threading.Event()
 unlock_attempt = True
 
 # API URLs for Fingerprint, NFC, and Current Date-Time
@@ -32,6 +33,7 @@ SOLENOID_PIN = 17
 GPIO.setmode(GPIO.BCM)
 GPIO.setup(SOLENOID_PIN, GPIO.OUT)
 
+
 # Initialize serial connection for fingerprint sensor
 def initialize_serial():
     try:
@@ -41,15 +43,19 @@ def initialize_serial():
         messagebox.showerror("Serial Error", f"Failed to connect to serial port: {e}")
         return None
 
+
 finger = initialize_serial()
+
 
 def unlock_door():
     GPIO.output(SOLENOID_PIN, GPIO.LOW)
     print("Door unlocked.")
 
+
 def lock_door():
     GPIO.output(SOLENOID_PIN, GPIO.HIGH)
     print("Door locked.")
+
 
 def get_user_details(fingerprint_id):
     try:
@@ -63,12 +69,15 @@ def get_user_details(fingerprint_id):
         messagebox.showerror("Request Error", f"Failed to connect to API: {e}")
         return None
 
+
 def fetch_current_date_time():
     """Fetches the current date and time from the API."""
     try:
         response = requests.get(CURRENT_DATE_TIME_URL)
         response.raise_for_status()
-        data = response.json()
+        data = response.json()  # Expected response: {'day_of_week': 'Sunday', 'date': '01', 'year': '2024', 'month': 'September', 'current_time': '17:04'}
+
+        # Validate the API response contains the necessary fields
         if 'day_of_week' in data and 'current_time' in data:
             return data
         else:
@@ -89,6 +98,7 @@ def check_time_in_record_fingerprint(fingerprint_id):
         print(f"Error checking Time-In record: {e}")
         return False
 
+
 def record_time_in_fingerprint(fingerprint_id, user_name, role_id="2"):
     try:
         current_time_data = fetch_current_date_time()
@@ -103,6 +113,7 @@ def record_time_in_fingerprint(fingerprint_id, user_name, role_id="2"):
     except requests.RequestException as e:
         messagebox.showerror("Error", f"Error recording Time-In: {e}")
 
+
 def record_time_out_fingerprint(fingerprint_id):
     try:
         current_time_data = fetch_current_date_time()
@@ -116,6 +127,89 @@ def record_time_out_fingerprint(fingerprint_id):
         print("Time-Out recorded successfully.")
     except requests.RequestException as e:
         print(f"Error recording Time-Out: {e}")
+
+
+def record_time_in(rfid_number, user_name, year):
+    try:
+        current_time_data = fetch_current_date_time()
+        if not current_time_data:
+            return
+        url = f"{TIME_IN_URL}?rfid_number={rfid_number}&time_in={current_time_data['current_time']}&year={year}&user_name={user_name}&role_id=3"
+        response = requests.put(url)
+        response.raise_for_status()
+        result = response.json()
+        print(result)
+        update_result("Time-In recorded successfully.")
+        fetch_recent_logs()
+    except requests.RequestException as e:
+        update_result(f"Error recording Time-In: {e}")
+
+
+def record_time_out(rfid_number):
+    try:
+        current_time_data = fetch_current_date_time()
+        if not current_time_data:
+            return
+        if not check_time_in_record(rfid_number):
+            update_result("No Time-In record found for this RFID. Cannot record Time-Out.")
+            return
+        url = f"{TIME_OUT_URL}?rfid_number={rfid_number}&time_out={current_time_data['current_time']}"
+        response = requests.put(url)
+        response.raise_for_status()
+        result = response.json()
+        print(result)
+        update_result("Time-Out recorded successfully.")
+        fetch_recent_logs()
+    except requests.RequestException as e:
+        update_result(f"Error recording Time-Out: {e}")
+
+
+def get_schedule(fingerprint_id):
+    """Check if the current time is within the allowed schedule for the given fingerprint ID."""
+    try:
+        # Fetch current date and time from the API
+        current_time_data = fetch_current_date_time()
+        if not current_time_data:
+            print("Error: Could not fetch current date and time from API.")
+            return False
+
+        # Extract the current day and time
+        current_day = current_time_data.get('day_of_week')
+        current_time = current_time_data.get('current_time')
+
+        if not current_day or not current_time:
+            print("Error: Invalid response from current date-time API.")
+            return False
+
+        print(f"Current Day from API: {current_day}, Current Time from API: {current_time}")
+
+        # Fetch the lab schedule for the given fingerprint ID
+        response = requests.get(f"{LAB_SCHEDULE_URL}{fingerprint_id}")
+        response.raise_for_status()
+        schedules = response.json()
+
+        # Check if the current time is within any of the schedules for today
+        for schedule in schedules:
+            schedule_day = schedule.get('day_of_the_week')
+            start_time = schedule.get('class_start')
+            end_time = schedule.get('class_end')
+
+            # Ensure all required fields are available
+            if schedule_day and start_time and end_time:
+                print(f"Checking Schedule: Day: {schedule_day}, Start: {start_time}, End: {end_time}")
+
+                # Check if current day matches the schedule day
+                if schedule_day == current_day:
+                    # Compare current time with class start and end times
+                    if start_time <= current_time <= end_time:
+                        print("Access allowed based on schedule.")
+                        return True  # Schedule matches, allow access
+
+        print("Access denied: No matching schedule found or not within allowed time.")
+        return False  # No matching schedule or not within allowed time
+    except requests.RequestException as e:
+        messagebox.showerror("Request Error", f"Failed to connect to API: {e}")
+        return False
 
 def auto_scan_fingerprint():
     global unlock_attempt
@@ -147,63 +241,26 @@ def auto_scan_fingerprint():
     if name:
         if get_schedule(finger.finger_id):  # Check if the current time is within the allowed schedule
             if not check_time_in_record_fingerprint(finger.finger_id):
-                # Record Time-In and unlock the door
+                # Record Time-In, unlock door, and transition to RFID scanning
                 record_time_in_fingerprint(finger.finger_id, name)
                 unlock_door()
                 messagebox.showinfo("Welcome", f"Welcome, {name}! Door unlocked.")
+                # Enable NFC scanning
+                nfc_enabled.set()  # Allow NFC scanning to proceed
             else:
                 # If a Time-In exists, record Time-Out and lock the door
                 record_time_out_fingerprint(finger.finger_id)
                 lock_door()
                 messagebox.showinfo("Goodbye", f"Goodbye, {name}! Door locked.")
+                # Stop NFC scanning as the session is complete
+                nfc_enabled.clear()  # Ensure NFC scanning stops after a Time-Out
         else:
             messagebox.showinfo("No Access", "Access denied due to schedule restrictions.")
     else:
         messagebox.showinfo("No Match", "No matching fingerprint found in the database.")
 
     # Continue scanning fingerprints after processing
-    root.after(5000, auto_scan_fingerprint)  # Restart fingerprint scanning after a delay
-
-def get_schedule(fingerprint_id):
-    """Check if the current time is within the allowed schedule for the given fingerprint ID."""
-    try:
-        current_time_data = fetch_current_date_time()
-        if not current_time_data:
-            print("Error: Could not fetch current date and time from API.")
-            return False
-
-        # Extract the current day and time
-        current_day = current_time_data.get('day_of_week')
-        current_time = current_time_data.get('current_time')
-
-        if not current_day or not current_time:
-            print("Error: Invalid response from current date-time API.")
-            return False
-
-        print(f"Current Day from API: {current_day}, Current Time from API: {current_time}")
-
-        response = requests.get(f"{LAB_SCHEDULE_URL}{fingerprint_id}")
-        response.raise_for_status()
-        schedules = response.json()
-
-        for schedule in schedules:
-            schedule_day = schedule.get('day_of_the_week')
-            start_time = schedule.get('class_start')
-            end_time = schedule.get('class_end')
-
-            if schedule_day and start_time and end_time:
-                print(f"Checking Schedule: Day: {schedule_day}, Start: {start_time}, End: {end_time}")
-
-                if schedule_day == current_day:
-                    if start_time <= current_time <= end_time:
-                        print("Access allowed based on schedule.")
-                        return True
-
-        print("Access denied: No matching schedule found or not within allowed time.")
-        return False
-    except requests.RequestException as e:
-        messagebox.showerror("Request Error", f"Failed to connect to API: {e}")
-        return False
+    root.after(5000, auto_scan_fingerprint)  # Restart fingerprint scanning after NFC loop
 
 # Initialize NFC frontend
 try:
@@ -211,6 +268,30 @@ try:
 except Exception as e:
     messagebox.showerror("NFC Error", f"Failed to initialize NFC reader: {e}")
     clf = None
+
+
+def fetch_recent_logs():
+    try:
+        response = requests.get(RECENT_LOGS_URL)
+        response.raise_for_status()
+        logs = response.json()
+        for i in logs_tree.get_children():
+            logs_tree.delete(i)
+        for log in logs:
+            logs_tree.insert("", "end", values=(
+                log.get('date', 'N/A'),
+                log.get('user_name', 'N/A'),
+                log.get('pc_name', 'N/A'),
+                log.get('student_number', 'N/A'),
+                log.get('year', 'N/A'),
+                log.get('section', 'N/A'),
+                log.get('faculty', 'N/A'),
+                log.get('time_in', 'N/A'),
+                log.get('time_out', 'N/A')
+            ))
+    except requests.RequestException as e:
+        update_result(f"Error fetching recent logs: {e}")
+
 
 def fetch_user_info(uid):
     try:
@@ -247,21 +328,50 @@ def fetch_user_info(uid):
     except requests.RequestException as e:
         update_result(f"Error fetching user info: {e}")
 
+
+def check_time_in_record(rfid_number):
+    try:
+        url = f'{RECENT_LOGS_URL2}?rfid_number={rfid_number}'
+        response = requests.get(url)
+        response.raise_for_status()
+        logs = response.json()
+        return any(log.get('time_in') and not log.get('time_out') for log in logs)
+    except requests.RequestException as e:
+        update_result(f"Error checking Time-In record: {e}")
+        return False
+
+
+def clear_data():
+    student_number_entry.delete(0, tk.END)
+    name_entry.delete(0, tk.END)
+    year_entry.delete(0, tk.END)
+    section_entry.delete(0, tk.END)
+    error_label.config(text="")
+
+
+def update_result(message):
+    error_label.config(text=message)
+
+
 def read_nfc_loop():
     def on_connect(tag):
         uid = tag.identifier.hex()
-        fetch_user_info(uid)
+        fetch_user_info(uid)  # This function handles time-in and time-out based on RFID scans
         return True
 
     try:
         while True:
-            if clf:
+            # Wait for the event triggered by fingerprint match
+            nfc_enabled.wait()  # Ensure NFC scanning starts only when enabled
+
+            if clf and nfc_enabled.is_set():
                 try:
                     clf.connect(rdwr={'on-connect': on_connect})
                 except Exception as e:
                     print(f"NFC read error: {e}")
-                    time.sleep(1)
+                    time.sleep(1)  # Delay to prevent excessive error logging
 
+            # Add a small delay to avoid busy-waiting
             time.sleep(0.1)
     except Exception as e:
         print(f"NFC Loop Error: {e}")
@@ -278,8 +388,9 @@ time_label = ttk.Label(time_frame, text="", font=("Arial", 14))
 time_label.pack()
 
 def update_time():
-    fetch_current_date_time()
-    root.after(10000, update_time)
+    fetch_current_date_time()  # Fetch and update the current date and time from the API
+    root.after(10000, update_time)  # Update every 10 seconds
+
 
 update_time()
 
@@ -335,9 +446,9 @@ for col in columns:
 # Start fingerprint and NFC threads
 fingerprint_thread = threading.Thread(target=auto_scan_fingerprint)
 nfc_thread = threading.Thread(target=read_nfc_loop)
-
 fingerprint_thread.start()
 nfc_thread.start()
+
 
 # Ensure threads are cleaned up properly
 def on_closing():
@@ -351,6 +462,7 @@ def on_closing():
         clf.close()
     root.destroy()
 
+
 root.protocol("WM_DELETE_WINDOW", on_closing)
 
 # Fetch and display recent logs
@@ -358,24 +470,3 @@ fetch_recent_logs()
 
 # Start the Tkinter main loop
 root.mainloop()
-
-NFC read error: main thread is not in main loop
-Templating...
-Exception in thread Thread-1 (auto_scan_fingerprint):
-Traceback (most recent call last):
-  File "/usr/lib/python3.11/threading.py", line 1038, in _bootstrap_inner
-    self.run()
-  File "/usr/lib/python3.11/threading.py", line 975, in run
-    self._target(*self._args, **self._kwargs)
-  File "/home/miko/Downloads/prolockv2/prolock_threading.py", line 132, in auto_scan_fingerprint
-    messagebox.showwarning("Error", "Failed to template the fingerprint image.")
-  File "/usr/lib/python3.11/tkinter/messagebox.py", line 93, in showwarning
-    return _show(title, message, WARNING, OK, **options)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/usr/lib/python3.11/tkinter/messagebox.py", line 76, in _show
-    res = Message(**options).show()
-          ^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/usr/lib/python3.11/tkinter/commondialog.py", line 45, in show
-    s = master.tk.call(self.command, *master._options(self.options))
-        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-RuntimeError: main thread is not in main loop
