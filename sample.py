@@ -9,7 +9,6 @@ import RPi.GPIO as GPIO
 import requests
 
 # Global flags and settings
-nfc_enabled = threading.Event()
 unlock_attempt = True
 
 # API URLs for Fingerprint, NFC, and Current Date-Time
@@ -245,15 +244,11 @@ def auto_scan_fingerprint():
                 record_time_in_fingerprint(finger.finger_id, name)
                 unlock_door()
                 messagebox.showinfo("Welcome", f"Welcome, {name}! Door unlocked.")
-                # Enable NFC scanning
-                nfc_enabled.set()  # Allow NFC scanning to proceed
             else:
                 # If a Time-In exists, record Time-Out and lock the door
                 record_time_out_fingerprint(finger.finger_id)
                 lock_door()
                 messagebox.showinfo("Goodbye", f"Goodbye, {name}! Door locked.")
-                # Stop NFC scanning as the session is complete
-                nfc_enabled.clear()  # Ensure NFC scanning stops after a Time-Out
         else:
             messagebox.showinfo("No Access", "Access denied due to schedule restrictions.")
     else:
@@ -356,25 +351,18 @@ def update_result(message):
 def read_nfc_loop():
     def on_connect(tag):
         uid = tag.identifier.hex()
-        fetch_user_info(uid)  # This function handles time-in and time-out based on RFID scans
+        fetch_user_info(uid)  # Function to handle user info based on the NFC tag read
         return True
 
-    try:
-        while True:
-            # Wait for the event triggered by fingerprint match
-            nfc_enabled.wait()  # Ensure NFC scanning starts only when enabled
-
-            if clf and nfc_enabled.is_set():
-                try:
-                    clf.connect(rdwr={'on-connect': on_connect})
-                except Exception as e:
-                    print(f"NFC read error: {e}")
-                    time.sleep(1)  # Delay to prevent excessive error logging
-
-            # Add a small delay to avoid busy-waiting
-            time.sleep(0.1)
-    except Exception as e:
-        print(f"NFC Loop Error: {e}")
+    while True:
+        if clf:
+            try:
+                print("Waiting for NFC tag...")
+                clf.connect(rdwr={'on-connect': on_connect})
+            except Exception as e:
+                print(f"NFC read error: {e}")
+                time.sleep(1)  # Delay to prevent rapid error logging
+        time.sleep(0.1)  # Short delay to reduce CPU usage
 
 # Create the main Tkinter window
 root = tk.Tk()
