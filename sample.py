@@ -9,7 +9,6 @@ import RPi.GPIO as GPIO
 import requests
 
 # Global flags and settings
-nfc_enabled = threading.Event()
 unlock_attempt = True
 
 # API URLs for Fingerprint, NFC, and Current Date-Time
@@ -256,7 +255,7 @@ def auto_scan_fingerprint():
         messagebox.showinfo("No Match", "No matching fingerprint found in the database.")
 
     # Continue scanning fingerprints after processing
-    root.after(5000, auto_scan_fingerprint)  # Restart fingerprint scanning after NFC loop
+    root.after(5000, auto_scan_fingerprint)  # Restart fingerprint scanning after a delay
 
 # Initialize NFC frontend
 try:
