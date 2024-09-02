@@ -276,26 +276,55 @@ class AttendanceApp:
                 messagebox.showinfo("No Match", "No matching fingerprint found in the database.")
 
     def record_all_time_out(self):
-
-    # Record a default time-out of '11:11' for all users with time-in but no time-out.
+        """Record a 'no time-out' status for all users with time-in but no time-out."""
         try:
             response = requests.get(RECENT_LOGS_URL)
             response.raise_for_status()
             logs = response.json()
-    
+
             # Loop through logs and find entries with time-in but no time-out
             for log in logs:
                 uid = log.get('UID')  # Use the correct key 'UID' from the JSON response
                 if log.get('time_in') and not log.get('time_out') and uid:
-                    default_time_out = "No Time-Out"
-                    url = f"{TIME_OUT_URL}?rfid_number={uid}&time_out={default_time_out}"
+                    url = f"{TIME_OUT_URL}?rfid_number={uid}&time_out=no%20time%20out"
                     response = requests.put(url)
                     response.raise_for_status()
-                    print(f"Time-Out recorded for UID {uid} at {default_time_out}.")
-                elif not uid:
-                    print("Error: UID is missing in the log entry.")
+                    print(f"Time-Out recorded for UID {uid} as 'no time-out'.")
+
+            # Refresh the logs table after updating time-out records
+            self.refresh_logs_table()
+
         except requests.RequestException as e:
             print(f"Error updating default time-out records: {e}")
+
+    def refresh_logs_table(self):
+        """Refresh the logs table to display the latest entries, including updates."""
+        self.root.after(100, self.fetch_recent_logs)  # Use Tkinter's 'after' method for thread-safe UI update
+
+    def fetch_recent_logs(self):
+        """Fetches and updates the logs table with the most recent logs."""
+        try:
+            response = requests.get(RECENT_LOGS_URL)
+            response.raise_for_status()
+            logs = response.json()
+            # Clear existing table entries
+            for i in self.logs_tree.get_children():
+                self.logs_tree.delete(i)
+            # Insert the latest logs into the table
+            for log in logs:
+                self.logs_tree.insert("", "end", values=(
+                    log.get('date', 'N/A'),  # Ensure this matches the available keys in your logs
+                    log.get('user_name', 'N/A'),
+                    log.get('pc_name', 'N/A'),
+                    log.get('user_number', 'N/A'),
+                    log.get('year', 'N/A'),
+                    log.get('block_name', 'N/A'),
+                    log.get('role_name', 'N/A'),
+                    log.get('time_in', 'N/A'),
+                    log.get('time_out', 'N/A')
+                ))
+        except requests.RequestException as e:
+            self.update_result(f"Error fetching recent logs: {e}")
 
     def read_nfc_loop(self):
         while self.running:
@@ -401,28 +430,6 @@ class AttendanceApp:
             self.fetch_recent_logs()
         except requests.RequestException as e:
             self.update_result(f"Error recording Time-Out: {e}")
-
-    def fetch_recent_logs(self):
-        try:
-            response = requests.get(RECENT_LOGS_URL)
-            response.raise_for_status()
-            logs = response.json()
-            for i in self.logs_tree.get_children():
-                self.logs_tree.delete(i)
-            for log in logs:
-                self.logs_tree.insert("", "end", values=(
-                    log.get('date', 'N/A'),
-                    log.get('user_name', 'N/A'),
-                    log.get('pc_name', 'N/A'),
-                    log.get('student_number', 'N/A'),
-                    log.get('year', 'N/A'),
-                    log.get('section', 'N/A'),
-                    log.get('faculty', 'N/A'),
-                    log.get('time_in', 'N/A'),
-                    log.get('time_out', 'N/A')
-                ))
-        except requests.RequestException as e:
-            self.update_result(f"Error fetching recent logs: {e}")
 
     def clear_data(self):
         self.student_number_entry.delete(0, tk.END)
