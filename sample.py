@@ -285,7 +285,7 @@ class AttendanceApp:
         for log in logs:
             uid = log.get('UID')  # Use the correct key 'UID' from the JSON response
             if log.get('time_in') and not log.get('time_out') and uid:
-                default_time_out = "11:11"
+                default_time_out = "No Time-Out"
                 url = f"{TIME_OUT_URL}?rfid_number={uid}&time_out={default_time_out}"
                 response = requests.put(url)
                 response.raise_for_status()
