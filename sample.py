@@ -24,14 +24,13 @@ RECENT_LOGS_URL2 = 'https://prolocklogger.pro/api/recent-logs/by-uid'
 CURRENT_DATE_TIME_URL = 'https://prolocklogger.pro/api/current-date-time'
 LAB_SCHEDULE_URL = 'https://prolocklogger.pro/api/student/lab-schedule/rfid/'
 
-# GPIO pin configuration for the solenoid lock
+# GPIO pin configuration for the solenoid lock and buzzer
 SOLENOID_PIN = 17
-# Define GPIO pin for the buzzer
 BUZZER_PIN = 27
+
 # Setup GPIO
 GPIO.setmode(GPIO.BCM)
 GPIO.setup(SOLENOID_PIN, GPIO.OUT)
-# Setup GPIO for the buzzer
 GPIO.setup(BUZZER_PIN, GPIO.OUT)
 
 
@@ -97,9 +96,8 @@ class AttendanceApp:
         self.fingerprint_thread = threading.Thread(target=self.auto_scan_fingerprint)
         self.fingerprint_thread.start()
 
-        # Track the last time-in for each user by UID and fingerprint
+        # Track the last time-in for each user by fingerprint ID
         self.last_time_in = {}
-        self.last_time_in_fingerprint = {}  # Track the last time-in for each fingerprint ID
 
         # Handle window close event
         self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
@@ -259,15 +257,11 @@ class AttendanceApp:
             current_time_data = self.fetch_current_date_time()
             if not current_time_data:
                 return
-            # Record time-in in the API
             url = f"{TIME_IN_FINGERPRINT_URL}?fingerprint_id={fingerprint_id}&time_in={current_time_data['current_time']}&user_name={user_name}&role_id={role_id}"
             response = requests.put(url)
             response.raise_for_status()
             print("Time-In recorded successfully.")
             messagebox.showinfo("Success", "Time-In recorded successfully.")
-
-            # Track the last time-in
-            self.last_time_in_fingerprint[fingerprint_id] = datetime.strptime(current_time_data['current_time'], "%H:%M")
         except requests.RequestException as e:
             messagebox.showerror("Error", f"Error recording Time-In: {e}")
 
@@ -276,18 +270,6 @@ class AttendanceApp:
             current_time_data = self.fetch_current_date_time()
             if not current_time_data:
                 return
-
-            # Check if there's a recorded time-in and ensure it's not within 5 minutes
-            if fingerprint_id in self.last_time_in_fingerprint:
-                last_time_in = self.last_time_in_fingerprint[fingerprint_id]
-                current_time = datetime.strptime(current_time_data['current_time'], "%H:%M")
-
-                # Check if the time-out is attempted within 5 minutes of time-in
-                if current_time - last_time_in < timedelta(minutes=5):
-                    messagebox.showinfo("Error", "Cannot record Time-Out within 5 minutes of Time-In.")
-                    return
-
-            # Record time-out in the API
             url = f"{TIME_OUT_FINGERPRINT_URL}?fingerprint_id={fingerprint_id}&time_out={current_time_data['current_time']}"
             response = requests.put(url)
             response.raise_for_status()
@@ -332,17 +314,31 @@ class AttendanceApp:
 
             if name:
                 if self.get_schedule(self.finger.finger_id):  # Check if the current time is within the allowed schedule
+                    # Fetch current time for comparison
+                    current_time_data = self.fetch_current_date_time()
+                    if not current_time_data:
+                        return
+                    current_time = datetime.strptime(current_time_data['current_time'], "%H:%M")
+
+                    # Check if there's a recent time-in record without a time-out
+                    if self.finger.finger_id in self.last_time_in:
+                        time_in_time = self.last_time_in[self.finger.finger_id]
+                        # Check if the time-out attempt is within 5 minutes of the time-in
+                        if current_time - time_in_time < timedelta(minutes=5):
+                            self.update_result("Cannot record Time-Out within 5 minutes of Time-In.")
+                            continue
+
+                    # Check if the user has no time-in record
                     if not self.check_time_in_record_fingerprint(self.finger.finger_id):
                         self.record_time_in_fingerprint(self.finger.finger_id, name)
                         self.unlock_door()
+                        self.last_time_in[self.finger.finger_id] = current_time  # Store the time-in time
                         messagebox.showinfo("Welcome", f"Welcome, {name}! Door unlocked.")
-                        # Do not trigger buzzer on successful time-in
                     else:
                         self.record_time_out_fingerprint(self.finger.finger_id)
                         self.lock_door()
                         self.record_all_time_out()  # Record time-out for all entries without time-out
                         messagebox.showinfo("Goodbye", f"Goodbye, {name}! Door locked.")
-                        # No buzzer activation on time-out
                 else:
                     messagebox.showinfo("No Access", "Access denied due to schedule restrictions.")
             else:
@@ -455,6 +451,13 @@ class AttendanceApp:
                 return
 
             current_time = datetime.strptime(current_time_data['current_time'], "%H:%M")
+
+            # Check if the user is attempting to time-out within 5 minutes of time-in
+            if uid in self.last_time_in:
+                time_in_time = self.last_time_in[uid]
+                if current_time - time_in_time < timedelta(minutes=5):
+                    self.update_result("Cannot record Time-Out within 5 minutes of Time-In.")
+                    return
 
             if self.check_time_in_record(uid):
                 self.record_time_out(uid)
