@@ -446,3 +446,5 @@ app = AttendanceApp(root)
 
 # Run the application
 root.mainloop()
+
+Error updating default time-out records: 404 Client Error: Not Found for url: https://prolocklogger.pro/api/logs/time-out?rfid_number=None&time_out=11:11
