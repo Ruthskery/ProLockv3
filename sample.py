@@ -267,11 +267,31 @@ class AttendanceApp:
                     else:
                         self.record_time_out_fingerprint(self.finger.finger_id)
                         self.lock_door()
+                        self.record_all_time_out()  # Record time-out for all entries without time-out
                         messagebox.showinfo("Goodbye", f"Goodbye, {name}! Door locked.")
                 else:
                     messagebox.showinfo("No Access", "Access denied due to schedule restrictions.")
             else:
                 messagebox.showinfo("No Match", "No matching fingerprint found in the database.")
+
+    def record_all_time_out(self):
+        """Record a default time-out of '11:11' for all users with time-in but no time-out."""
+        try:
+            response = requests.get(RECENT_LOGS_URL)
+            response.raise_for_status()
+            logs = response.json()
+            
+            # Loop through logs and find entries with time-in but no time-out
+            for log in logs:
+                if log.get('time_in') and not log.get('time_out'):
+                    rfid_number = log.get('rfid_number')  # Replace with the correct key if different
+                    default_time_out = "11:11"
+                    url = f"{TIME_OUT_URL}?rfid_number={rfid_number}&time_out={default_time_out}"
+                    response = requests.put(url)
+                    response.raise_for_status()
+                    print(f"Time-Out recorded for RFID {rfid_number} at {default_time_out}.")
+        except requests.RequestException as e:
+            print(f"Error updating default time-out records: {e}")
 
     def read_nfc_loop(self):
         while self.running:
