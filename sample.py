@@ -14,6 +14,7 @@ FINGERPRINT_API_URL = "https://prolocklogger.pro/api/getuserbyfingerprint/"
 TIME_IN_FINGERPRINT_URL = "https://prolocklogger.pro/api/logs/time-in/fingerprint"
 TIME_OUT_FINGERPRINT_URL = "https://prolocklogger.pro/api/logs/time-out/fingerprint"
 RECENT_LOGS_FINGERPRINT_URL2 = 'https://prolocklogger.pro/api/recent-logs/by-fingerid'
+LAB_SCHEDULE_FINGERPRINT_URL = 'https://prolocklogger.pro/api/lab-schedules/fingerprint/'
 
 USER_INFO_URL = 'https://prolocklogger.pro/api/user-information/by-id-card'
 RECENT_LOGS_URL = 'https://prolocklogger.pro/api/recent-logs'
@@ -21,14 +22,17 @@ TIME_IN_URL = 'https://prolocklogger.pro/api/logs/time-in'
 TIME_OUT_URL = 'https://prolocklogger.pro/api/logs/time-out'
 RECENT_LOGS_URL2 = 'https://prolocklogger.pro/api/recent-logs/by-uid'
 CURRENT_DATE_TIME_URL = 'https://prolocklogger.pro/api/current-date-time'
-LAB_SCHEDULE_URL = 'https://prolocklogger.pro/api/lab-schedules/fingerprint/'
+LAB_SCHEDULE_URL = 'https://prolocklogger.pro/api/lab-schedule/rfid/'
 
 # GPIO pin configuration for the solenoid lock
 SOLENOID_PIN = 17
-
+# Define GPIO pin for the buzzer
+BUZZER_PIN = 27
 # Setup GPIO
 GPIO.setmode(GPIO.BCM)
 GPIO.setup(SOLENOID_PIN, GPIO.OUT)
+# Setup GPIO for the buzzer
+GPIO.setup(BUZZER_PIN, GPIO.OUT)
 
 
 class AttendanceApp:
@@ -174,7 +178,7 @@ class AttendanceApp:
 
             print(f"Current Day from API: {current_day}, Current Time from API: {current_time}")
 
-            response = requests.get(f"{LAB_SCHEDULE_URL}{fingerprint_id}")
+            response = requests.get(f"{LAB_SCHEDULE_FINGERPRINT_URL}{fingerprint_id}")
             response.raise_for_status()
             schedules = response.json()
 
@@ -195,6 +199,47 @@ class AttendanceApp:
             return False
         except requests.RequestException as e:
             messagebox.showerror("Request Error", f"Failed to connect to API: {e}")
+            return False
+
+    def get_rfid_schedule(self, rfid_number):
+        """Fetch and check if the current time is within the allowed schedule for the given RFID Number."""
+        try:
+            current_time_data = self.fetch_current_date_time()
+            if not current_time_data:
+                print("Error: Could not fetch current date and time from API.")
+                return False
+
+            current_day = current_time_data.get('day_of_week')
+            current_time = current_time_data.get('current_time')
+
+            if not current_day or not current_time:
+                print("Error: Invalid response from current date-time API.")
+                return False
+
+            print(f"Current Day from API: {current_day}, Current Time from API: {current_time}")
+
+            # Fetch the schedule for the RFID number
+            response = requests.get(f"{LAB_SCHEDULE_URL}{rfid_number}")
+            response.raise_for_status()
+            schedules = response.json()
+
+            # Check if the current time falls within any of the allowed schedules
+            for schedule in schedules:
+                schedule_day = schedule.get('day_of_the_week')
+                start_time = schedule.get('class_start')
+                end_time = schedule.get('class_end')
+
+                if schedule_day and start_time and end_time:
+                    print(f"Checking Schedule: Day: {schedule_day}, Start: {start_time}, End: {end_time}")
+
+                    if schedule_day == current_day and start_time <= current_time <= end_time:
+                        print("Access allowed based on schedule.")
+                        return True
+
+            print("Access denied: No matching schedule found or not within allowed time.")
+            return False
+        except requests.RequestException as e:
+            print(f"Error fetching or checking schedule: {e}")
             return False
 
     def check_time_in_record_fingerprint(self, fingerprint_id):
@@ -234,6 +279,8 @@ class AttendanceApp:
             print(f"Error recording Time-Out: {e}")
 
     def auto_scan_fingerprint(self):
+        failed_attempts = 0  # Initialize the counter for failed attempts
+
         while self.running:
             if not self.finger:
                 return
@@ -247,12 +294,19 @@ class AttendanceApp:
             print("Templating...")
             if self.finger.image_2_tz(1) != adafruit_fingerprint.OK:
                 messagebox.showwarning("Error", "Failed to template the fingerprint image.")
+                failed_attempts += 1
+                self.check_failed_attempts(failed_attempts)  # Check failed attempts and trigger the buzzer if needed
                 continue
 
             print("Searching...")
             if self.finger.finger_search() != adafruit_fingerprint.OK:
                 messagebox.showwarning("Error", "Failed to search for fingerprint match.")
+                failed_attempts += 1
+                self.check_failed_attempts(failed_attempts)  # Check failed attempts and trigger the buzzer if needed
                 continue
+
+            # Reset failed attempts if successful
+            failed_attempts = 0
 
             print("Detected fingerprint ID:", self.finger.finger_id, "with confidence", self.finger.confidence)
 
@@ -265,15 +319,33 @@ class AttendanceApp:
                         self.record_time_in_fingerprint(self.finger.finger_id, name)
                         self.unlock_door()
                         messagebox.showinfo("Welcome", f"Welcome, {name}! Door unlocked.")
+                        # Do not trigger buzzer on successful time-in
                     else:
                         self.record_time_out_fingerprint(self.finger.finger_id)
                         self.lock_door()
                         self.record_all_time_out()  # Record time-out for all entries without time-out
                         messagebox.showinfo("Goodbye", f"Goodbye, {name}! Door locked.")
+                        # No buzzer activation on time-out
                 else:
                     messagebox.showinfo("No Access", "Access denied due to schedule restrictions.")
             else:
                 messagebox.showinfo("No Match", "No matching fingerprint found in the database.")
+
+    def check_failed_attempts(self, failed_attempts):
+        """Triggers the buzzer if failed attempts reach 3."""
+        if failed_attempts >= 3:
+            print("Three consecutive failed attempts detected. Activating buzzer.")
+            self.trigger_buzzer()
+            # Reset the failed attempts counter after buzzer activation
+            failed_attempts = 0
+
+    def trigger_buzzer(self):
+        """Activates the buzzer for 5 seconds with 0.1-second intervals."""
+        for _ in range(50):  # 5 seconds with 0.1-second intervals
+            GPIO.output(BUZZER_PIN, GPIO.HIGH)
+            time.sleep(0.1)
+            GPIO.output(BUZZER_PIN, GPIO.LOW)
+            time.sleep(0.1)
 
     def record_all_time_out(self):
         """Record a default time-out of '11:11' for all users with time-in but no time-out."""
@@ -368,11 +440,11 @@ class AttendanceApp:
             current_time = datetime.strptime(current_time_data['current_time'], "%H:%M")
 
             # Check if the user is attempting to time-out within 5 minutes of time-in
-            if uid in self.last_time_in:
-                time_in_time = self.last_time_in[uid]
-                if current_time - time_in_time < timedelta(minutes=5):
-                    self.update_result("Cannot record Time-Out within 5 minutes of Time-In.")
-                    return
+            # if uid in self.last_time_in:
+            #    time_in_time = self.last_time_in[uid]
+            #    if current_time - time_in_time < timedelta(minutes=5):
+            #        self.update_result("Cannot record Time-Out within 5 minutes of Time-In.")
+            #        return
 
             if self.check_time_in_record(uid):
                 self.record_time_out(uid)
@@ -401,6 +473,11 @@ class AttendanceApp:
             return False
 
     def record_time_in(self, rfid_number, user_name, year):
+        # Check if the RFID number is within the allowed schedule
+        if not self.get_rfid_schedule(rfid_number):
+            self.update_result("Access denied: Not within scheduled time.")
+            return
+
         try:
             current_time_data = self.fetch_current_date_time()
             if not current_time_data:
@@ -415,6 +492,11 @@ class AttendanceApp:
             self.update_result(f"Error recording Time-In: {e}")
 
     def record_time_out(self, rfid_number):
+        # Check if the RFID number is within the allowed schedule
+        if not self.get_rfid_schedule(rfid_number):
+            self.update_result("Access denied: Not within scheduled time.")
+            return
+
         try:
             current_time_data = self.fetch_current_date_time()
             if not current_time_data:
