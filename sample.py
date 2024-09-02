@@ -276,7 +276,7 @@ class AttendanceApp:
                 messagebox.showinfo("No Match", "No matching fingerprint found in the database.")
 
     def record_all_time_out(self):
-        """Record a 'no time-out' status for all users with time-in but no time-out."""
+        """Record a default time-out of '11:11' for all users with time-in but no time-out."""
         try:
             response = requests.get(RECENT_LOGS_URL)
             response.raise_for_status()
@@ -286,10 +286,11 @@ class AttendanceApp:
             for log in logs:
                 uid = log.get('UID')  # Use the correct key 'UID' from the JSON response
                 if log.get('time_in') and not log.get('time_out') and uid:
-                    url = f"{TIME_OUT_URL}?rfid_number={uid}&time_out=no%20time%20out"
+                    default_time_out = "00:00"
+                    url = f"{TIME_OUT_URL}?rfid_number={uid}&time_out={default_time_out}"
                     response = requests.put(url)
                     response.raise_for_status()
-                    print(f"Time-Out recorded for UID {uid} as 'no time-out'.")
+                    print(f"Time-Out recorded for UID {uid} at {default_time_out}.")
 
             # Refresh the logs table after updating time-out records
             self.refresh_logs_table()
