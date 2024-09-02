@@ -275,7 +275,7 @@ class AttendanceApp:
                 messagebox.showinfo("No Match", "No matching fingerprint found in the database.")
 
     def record_all_time_out(self):
-    """Record a default time-out of '11:11' for all users with time-in but no time-out."""
+    # Record a default time-out of '11:11' for all users with time-in but no time-out.
     try:
         response = requests.get(RECENT_LOGS_URL)
         response.raise_for_status()
@@ -283,16 +283,15 @@ class AttendanceApp:
         
         # Loop through logs and find entries with time-in but no time-out
         for log in logs:
-            # Replace 'correct_key' with the actual key used in your logs for the RFID or fingerprint ID
-            rfid_number = log.get('rfid_number') or log.get('id_card')  # Adjust keys based on actual response
-            if log.get('time_in') and not log.get('time_out') and rfid_number:
+            uid = log.get('UID')  # Use the correct key 'UID' from the JSON response
+            if log.get('time_in') and not log.get('time_out') and uid:
                 default_time_out = "11:11"
-                url = f"{TIME_OUT_URL}?rfid_number={rfid_number}&time_out={default_time_out}"
+                url = f"{TIME_OUT_URL}?rfid_number={uid}&time_out={default_time_out}"
                 response = requests.put(url)
                 response.raise_for_status()
-                print(f"Time-Out recorded for RFID {rfid_number} at {default_time_out}.")
-            elif not rfid_number:
-                print("Error: RFID number is missing in the log entry.")
+                print(f"Time-Out recorded for UID {uid} at {default_time_out}.")
+            elif not uid:
+                print("Error: UID is missing in the log entry.")
     except requests.RequestException as e:
         print(f"Error updating default time-out records: {e}")
 
