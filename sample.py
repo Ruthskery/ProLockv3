@@ -30,6 +30,7 @@ SOLENOID_PIN = 17
 GPIO.setmode(GPIO.BCM)
 GPIO.setup(SOLENOID_PIN, GPIO.OUT)
 
+
 class AttendanceApp:
     def __init__(self, root):
         self.root = root
@@ -275,25 +276,26 @@ class AttendanceApp:
                 messagebox.showinfo("No Match", "No matching fingerprint found in the database.")
 
     def record_all_time_out(self):
+
     # Record a default time-out of '11:11' for all users with time-in but no time-out.
-    try:
-        response = requests.get(RECENT_LOGS_URL)
-        response.raise_for_status()
-        logs = response.json()
-        
-        # Loop through logs and find entries with time-in but no time-out
-        for log in logs:
-            uid = log.get('UID')  # Use the correct key 'UID' from the JSON response
-            if log.get('time_in') and not log.get('time_out') and uid:
-                default_time_out = "No Time-Out"
-                url = f"{TIME_OUT_URL}?rfid_number={uid}&time_out={default_time_out}"
-                response = requests.put(url)
-                response.raise_for_status()
-                print(f"Time-Out recorded for UID {uid} at {default_time_out}.")
-            elif not uid:
-                print("Error: UID is missing in the log entry.")
-    except requests.RequestException as e:
-        print(f"Error updating default time-out records: {e}")
+        try:
+            response = requests.get(RECENT_LOGS_URL)
+            response.raise_for_status()
+            logs = response.json()
+    
+            # Loop through logs and find entries with time-in but no time-out
+            for log in logs:
+                uid = log.get('UID')  # Use the correct key 'UID' from the JSON response
+                if log.get('time_in') and not log.get('time_out') and uid:
+                    default_time_out = "No Time-Out"
+                    url = f"{TIME_OUT_URL}?rfid_number={uid}&time_out={default_time_out}"
+                    response = requests.put(url)
+                    response.raise_for_status()
+                    print(f"Time-Out recorded for UID {uid} at {default_time_out}.")
+                elif not uid:
+                    print("Error: UID is missing in the log entry.")
+        except requests.RequestException as e:
+            print(f"Error updating default time-out records: {e}")
 
     def read_nfc_loop(self):
         while self.running:
@@ -442,16 +444,10 @@ class AttendanceApp:
             self.clf.close()
         self.root.destroy()
 
+
 # Create the main window
 root = tk.Tk()
 app = AttendanceApp(root)
 
 # Run the application
 root.mainloop()
-
-Error: RFID number is missing in the log entry.
-Error: RFID number is missing in the log entry.
-Error: RFID number is missing in the log entry.
-Error: RFID number is missing in the log entry.
-Error: RFID number is missing in the log entry.
-Error: RFID number is missing in the log entry.
