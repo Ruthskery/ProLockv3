@@ -23,6 +23,7 @@ TIME_OUT_URL = 'https://prolocklogger.pro/api/logs/time-out'
 RECENT_LOGS_URL2 = 'https://prolocklogger.pro/api/recent-logs/by-uid'
 CURRENT_DATE_TIME_URL = 'https://prolocklogger.pro/api/current-date-time'
 LAB_SCHEDULE_URL = 'https://prolocklogger.pro/api/student/lab-schedule/rfid/'
+LOGS_URL = 'https://prolocklogger.pro/api/logs'  # Added log status API URL
 
 # GPIO pin configuration for the solenoid lock and buzzer
 SOLENOID_PIN = 17
@@ -99,6 +100,9 @@ class AttendanceApp:
         # Track the last time-in for each user by fingerprint ID
         self.last_time_in = {}
 
+        # Start periodic checking of log status
+        self.root.after(10000, self.check_log_status_periodically)  # Check log status every 10 seconds
+
         # Handle window close event
         self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
 
@@ -135,6 +139,27 @@ class AttendanceApp:
         GPIO.output(SOLENOID_PIN, GPIO.HIGH)
         print("Door locked.")
 
+    def fetch_latest_log_status(self):
+        try:
+            response = requests.get(LOGS_URL)
+            response.raise_for_status()
+            logs = response.json().get("logs", [])
+
+            if logs:
+                latest_log = logs[-1]  # Get the latest log (assumes logs are in chronological order)
+                status = latest_log.get("status", "")
+
+                if status == "open":
+                    self.lock_door()
+                elif status == "close":
+                    self.unlock_door()
+        except requests.RequestException as e:
+            print(f"Error fetching log status: {e}")
+
+    def check_log_status_periodically(self):
+        self.fetch_latest_log_status()
+        self.root.after(10000, self.check_log_status_periodically)  # Call again after 10 seconds
+
     def get_user_details(self, fingerprint_id):
         try:
             response = requests.get(f"{FINGERPRINT_API_URL}{fingerprint_id}")
@@ -146,7 +171,6 @@ class AttendanceApp:
             return None
 
     def fetch_current_date_time(self):
-        """Fetches the current date and time from the API."""
         try:
             response = requests.get(CURRENT_DATE_TIME_URL)
             response.raise_for_status()
@@ -161,7 +185,6 @@ class AttendanceApp:
             return None
 
     def get_schedule(self, fingerprint_id):
-        """Check if the current time is within the allowed schedule for the given fingerprint ID."""
         try:
             current_time_data = self.fetch_current_date_time()
             if not current_time_data:
@@ -201,7 +224,6 @@ class AttendanceApp:
             return False
 
     def get_rfid_schedule(self, rfid_number):
-        """Fetch and check if the current time is within the allowed schedule for the given RFID Number."""
         try:
             current_time_data = self.fetch_current_date_time()
             if not current_time_data:
@@ -217,12 +239,10 @@ class AttendanceApp:
 
             print(f"Current Day from API: {current_day}, Current Time from API: {current_time}")
 
-            # Fetch the schedule for the RFID number
             response = requests.get(f"{LAB_SCHEDULE_URL}{rfid_number}")
             response.raise_for_status()
             schedules = response.json()
 
-            # Check if the current time falls within any of the allowed schedules
             for schedule in schedules:
                 schedule_day = schedule.get('day_of_the_week')
                 start_time = schedule.get('class_start')
@@ -321,12 +341,12 @@ class AttendanceApp:
                     current_time = datetime.strptime(current_time_data['current_time'], "%H:%M")
 
                     # Check if there's a recent time-in record without a time-out
-                    if self.finger.finger_id in self.last_time_in:
-                        time_in_time = self.last_time_in[self.finger.finger_id]
-                        # Check if the time-out attempt is within 5 minutes of the time-in
-                        if current_time - time_in_time < timedelta(minutes=5):
-                            self.update_result("Cannot record Time-Out within 5 minutes of Time-In.")
-                            continue
+                    #if self.finger.finger_id in self.last_time_in:
+                    #    time_in_time = self.last_time_in[self.finger.finger_id]
+                    #    # Check if the time-out attempt is within 5 minutes of the time-in
+                    #    if current_time - time_in_time < timedelta(minutes=5):
+                    #        self.update_result("Cannot record Time-Out within 5 minutes of Time-In.")
+                    #        continue
 
                     # Check if the user has no time-in record
                     if not self.check_time_in_record_fingerprint(self.finger.finger_id):
@@ -345,15 +365,12 @@ class AttendanceApp:
                 messagebox.showinfo("No Match", "No matching fingerprint found in the database.")
 
     def check_failed_attempts(self, failed_attempts):
-        """Triggers the buzzer if failed attempts reach 3."""
         if failed_attempts >= 3:
             print("Three consecutive failed attempts detected. Activating buzzer.")
             self.trigger_buzzer()
-            # Reset the failed attempts counter after buzzer activation
             failed_attempts = 0
 
     def trigger_buzzer(self):
-        """Activates the buzzer for 5 seconds with 0.1-second intervals."""
         for _ in range(50):  # 5 seconds with 0.1-second intervals
             GPIO.output(BUZZER_PIN, GPIO.HIGH)
             time.sleep(0.1)
@@ -361,15 +378,13 @@ class AttendanceApp:
             time.sleep(0.1)
 
     def record_all_time_out(self):
-        """Record a default time-out of '11:11' for all users with time-in but no time-out."""
         try:
             response = requests.get(RECENT_LOGS_URL)
             response.raise_for_status()
             logs = response.json()
 
-            # Loop through logs and find entries with time-in but no time-out
             for log in logs:
-                uid = log.get('UID')  # Use the correct key 'UID' from the JSON response
+                uid = log.get('UID')
                 if log.get('time_in') and not log.get('time_out') and uid:
                     default_time_out = "00:00"
                     url = f"{TIME_OUT_URL}?rfid_number={uid}&time_out={default_time_out}"
@@ -377,29 +392,24 @@ class AttendanceApp:
                     response.raise_for_status()
                     print(f"Time-Out recorded for UID {uid} at {default_time_out}.")
 
-            # Refresh the logs table after updating time-out records
             self.refresh_logs_table()
 
         except requests.RequestException as e:
             print(f"Error updating default time-out records: {e}")
 
     def refresh_logs_table(self):
-        """Refresh the logs table to display the latest entries, including updates."""
-        self.root.after(100, self.fetch_recent_logs)  # Use Tkinter's 'after' method for thread-safe UI update
+        self.root.after(100, self.fetch_recent_logs)
 
     def fetch_recent_logs(self):
-        """Fetches and updates the logs table with the most recent logs."""
         try:
             response = requests.get(RECENT_LOGS_URL)
             response.raise_for_status()
             logs = response.json()
-            # Clear existing table entries
             for i in self.logs_tree.get_children():
                 self.logs_tree.delete(i)
-            # Insert the latest logs into the table
             for log in logs:
                 self.logs_tree.insert("", "end", values=(
-                    log.get('date', 'N/A'),  # Ensure this matches the available keys in your logs
+                    log.get('date', 'N/A'),
                     log.get('user_name', 'N/A'),
                     log.get('pc_name', 'N/A'),
                     log.get('user_number', 'N/A'),
@@ -445,25 +455,17 @@ class AttendanceApp:
 
             self.error_label.config(text="")
 
-            # Track the last time-in for this UID
             current_time_data = self.fetch_current_date_time()
             if not current_time_data:
                 return
 
             current_time = datetime.strptime(current_time_data['current_time'], "%H:%M")
 
-            # Check if the user is attempting to time-out within 5 minutes of time-in
-            if uid in self.last_time_in:
-                time_in_time = self.last_time_in[uid]
-                if current_time - time_in_time < timedelta(minutes=5):
-                    self.update_result("Cannot record Time-Out within 5 minutes of Time-In.")
-                    return
-
             if self.check_time_in_record(uid):
                 self.record_time_out(uid)
             else:
                 self.record_time_in(uid, data.get('user_name', 'None'), data.get('year', 'None'))
-                self.last_time_in[uid] = current_time  # Update the last time-in time
+                self.last_time_in[uid] = current_time
 
         except requests.HTTPError as http_err:
             if response.status_code == 404:
@@ -486,7 +488,6 @@ class AttendanceApp:
             return False
 
     def record_time_in(self, rfid_number, user_name, year):
-        # Check if the RFID number is within the allowed schedule
         if not self.get_rfid_schedule(rfid_number):
             self.update_result("Access denied: Not within scheduled time.")
             return
@@ -505,7 +506,6 @@ class AttendanceApp:
             self.update_result(f"Error recording Time-In: {e}")
 
     def record_time_out(self, rfid_number):
-        # Check if the RFID number is within the allowed schedule
         if not self.get_rfid_schedule(rfid_number):
             self.update_result("Access denied: Not within scheduled time.")
             return
