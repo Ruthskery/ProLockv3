@@ -99,6 +99,7 @@ class AttendanceApp:
 
         # Track the last time-in for each user by fingerprint ID
         self.last_time_in = {}
+        self.is_manual_unlock = False  # Flag to check if the door was manually unlocked
 
         # Start periodic checking of log status
         self.root.after(10000, self.check_log_status_periodically)  # Check log status every 10 seconds
@@ -149,10 +150,12 @@ class AttendanceApp:
                 latest_log = logs[-1]  # Get the latest log (assumes logs are in chronological order)
                 status = latest_log.get("status", "")
 
-                if status == "open":
-                    self.lock_door()
-                elif status == "close":
-                    self.unlock_door()
+                # Only lock the door if it was not manually unlocked
+                if not self.is_manual_unlock:
+                    if status == "open":
+                        self.lock_door()
+                    elif status == "close":
+                        self.unlock_door()
         except requests.RequestException as e:
             print(f"Error fetching log status: {e}")
 
@@ -340,23 +343,17 @@ class AttendanceApp:
                         return
                     current_time = datetime.strptime(current_time_data['current_time'], "%H:%M")
 
-                    # Check if there's a recent time-in record without a time-out
-                    #if self.finger.finger_id in self.last_time_in:
-                    #    time_in_time = self.last_time_in[self.finger.finger_id]
-                    #    # Check if the time-out attempt is within 5 minutes of the time-in
-                    #    if current_time - time_in_time < timedelta(minutes=5):
-                    #        self.update_result("Cannot record Time-Out within 5 minutes of Time-In.")
-                    #        continue
-
                     # Check if the user has no time-in record
                     if not self.check_time_in_record_fingerprint(self.finger.finger_id):
                         self.record_time_in_fingerprint(self.finger.finger_id, name)
                         self.unlock_door()
+                        self.is_manual_unlock = True  # Set flag to indicate manual unlock
                         self.last_time_in[self.finger.finger_id] = current_time  # Store the time-in time
                         messagebox.showinfo("Welcome", f"Welcome, {name}! Door unlocked.")
                     else:
                         self.record_time_out_fingerprint(self.finger.finger_id)
                         self.lock_door()
+                        self.is_manual_unlock = False  # Reset flag as door is locked again
                         self.record_all_time_out()  # Record time-out for all entries without time-out
                         messagebox.showinfo("Goodbye", f"Goodbye, {name}! Door locked.")
                 else:
