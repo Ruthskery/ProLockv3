@@ -99,7 +99,6 @@ class AttendanceApp:
 
         # Track the last time-in for each user by fingerprint ID
         self.last_time_in = {}
-        self.is_manual_unlock = False  # Flag to check if the door was manually unlocked
 
         # Start periodic checking of log status
         self.root.after(10000, self.check_log_status_periodically)  # Check log status every 10 seconds
@@ -150,12 +149,10 @@ class AttendanceApp:
                 latest_log = logs[-1]  # Get the latest log (assumes logs are in chronological order)
                 status = latest_log.get("status", "")
 
-                # Only lock the door if it was not manually unlocked
-                if not self.is_manual_unlock:
-                    if status == "open":
-                        self.lock_door()
-                    elif status == "close":
-                        self.unlock_door()
+                if status == "open":
+                    self.lock_door()
+                elif status == "close":
+                    self.unlock_door()
         except requests.RequestException as e:
             print(f"Error fetching log status: {e}")
 
@@ -170,7 +167,7 @@ class AttendanceApp:
             data = response.json()
             return data.get('name', None)
         except requests.RequestException as e:
-            messagebox.showerror("API Error", f"Failed to fetch data from API: {e}")
+            print("API Error", f"Failed to fetch data from API: {e}")
             return None
 
     def fetch_current_date_time(self):
@@ -223,7 +220,7 @@ class AttendanceApp:
             print("Access denied: No matching schedule found or not within allowed time.")
             return False
         except requests.RequestException as e:
-            messagebox.showerror("Request Error", f"Failed to connect to API: {e}")
+            print("Request Error", f"Failed to connect to API: {e}")
             return False
 
     def get_rfid_schedule(self, rfid_number):
@@ -284,9 +281,9 @@ class AttendanceApp:
             response = requests.put(url)
             response.raise_for_status()
             print("Time-In recorded successfully.")
-            messagebox.showinfo("Success", "Time-In recorded successfully.")
+            print("Success", "Time-In recorded successfully.")
         except requests.RequestException as e:
-            messagebox.showerror("Error", f"Error recording Time-In: {e}")
+            print("Error", f"Error recording Time-In: {e}")
 
     def record_time_out_fingerprint(self, fingerprint_id):
         try:
@@ -343,23 +340,29 @@ class AttendanceApp:
                         return
                     current_time = datetime.strptime(current_time_data['current_time'], "%H:%M")
 
+                    # Check if there's a recent time-in record without a time-out
+                    #if self.finger.finger_id in self.last_time_in:
+                    #    time_in_time = self.last_time_in[self.finger.finger_id]
+                    #    # Check if the time-out attempt is within 5 minutes of the time-in
+                    #    if current_time - time_in_time < timedelta(minutes=5):
+                    #        self.update_result("Cannot record Time-Out within 5 minutes of Time-In.")
+                    #        continue
+
                     # Check if the user has no time-in record
                     if not self.check_time_in_record_fingerprint(self.finger.finger_id):
                         self.record_time_in_fingerprint(self.finger.finger_id, name)
                         self.unlock_door()
-                        self.is_manual_unlock = True  # Set flag to indicate manual unlock
                         self.last_time_in[self.finger.finger_id] = current_time  # Store the time-in time
-                        messagebox.showinfo("Welcome", f"Welcome, {name}! Door unlocked.")
+                        print("Welcome", f"Welcome, {name}! Door unlocked.")
                     else:
                         self.record_time_out_fingerprint(self.finger.finger_id)
                         self.lock_door()
-                        self.is_manual_unlock = False  # Reset flag as door is locked again
                         self.record_all_time_out()  # Record time-out for all entries without time-out
-                        messagebox.showinfo("Goodbye", f"Goodbye, {name}! Door locked.")
+                        print("Goodbye", f"Goodbye, {name}! Door locked.")
                 else:
-                    messagebox.showinfo("No Access", "Access denied due to schedule restrictions.")
+                    print("No Access", "Access denied due to schedule restrictions.")
             else:
-                messagebox.showinfo("No Match", "No matching fingerprint found in the database.")
+                print("No Match", "No matching fingerprint found in the database.")
 
     def check_failed_attempts(self, failed_attempts):
         if failed_attempts >= 3:
