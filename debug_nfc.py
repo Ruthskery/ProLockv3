@@ -399,9 +399,6 @@ class AttendanceApp:
             print(f"Failed to initialize TTS engine: {e}")
             self.speech_engine = None  # Set to None to handle in speak method
 
-        # Initialize the last scan time
-        # self.last_scan_time = None  # Initialize last_scan_time to None
-
         # Define custom fonts
         heading_font = font.Font(family="Exo 2", size=16, weight="bold")
         label_font = font.Font(family="Exo 2", size=20, weight="bold")
@@ -1080,6 +1077,7 @@ class AttendanceApp:
 
             # Search for fingerprint match and get the fingerprint ID
             if self.finger.finger_search() != adafruit_fingerprint.OK:
+                # If fingerprint search fails, no match is found
                 self.update_result("No matching fingerprint found.", color="red")
                 self.play_wrong_song()  # Play the song when the door is unlocked
                 self.speak("No matching fingerprint found. Please try again.")
@@ -1106,8 +1104,6 @@ class AttendanceApp:
                 continue
 
             print(f"User {name} found in the database.")
-
-            current_time = datetime.now()
 
             # Determine if we should skip the schedule check and time-in/time-out for superusers
             is_superuser = fingerprint_id in [1, 2]
@@ -1151,27 +1147,25 @@ class AttendanceApp:
                     return
                 current_time = datetime.strptime(current_time_data['current_time'], "%H:%M")
 
-                # Check if we can perform a time-in
                 if not self.check_time_in_record_fingerprint(fingerprint_id):
-                    # Check if the last time-in was within the last 2 minutes
-                    if fingerprint_id in self.last_time_in:
-                        last_time_in = self.last_time_in[fingerprint_id]
-                        elapsed_time = (current_time - last_time_in).total_seconds()
-                        if elapsed_time < 120:  # Less than 2 minutes
-                            self.update_result("Time-In locked for 2 minutes. Please wait.", color="red")
-                            time.sleep(120 - elapsed_time)  # Wait until the 2 minutes is over
-
                     self.record_time_in_fingerprint(fingerprint_id, name)
+                    # self.unlock_door()
+
                     # Update door status to 'open' using the API
                     self.update_door_status(fingerprint_id, 'open')
+
                     self.is_manual_unlock = True
-                    self.last_time_in[fingerprint_id] = current_time  # Update last time in for this fingerprint ID
+                    self.last_time_in[fingerprint_id] = current_time
                     self.update_result(f"Welcome, {name}! Door unlocked.", color="green")
                     self.speak(f"Welcome {name}. The door is unlocked.")
                     self.play_welcome_song()  # Play the song when the door is unlocked
+
+                    # # Update door status to 'open' using the API
+                    # self.update_door_status(fingerprint_id, 'open')
                 else:
-                    # If time-in record exists, handle the time-out
                     self.record_time_out_fingerprint(fingerprint_id)
+                    # self.lock_door()
+
                     # Update door status to 'close' using the API
                     self.update_door_status(fingerprint_id, 'close')
                     self.is_manual_unlock = False
@@ -1179,6 +1173,9 @@ class AttendanceApp:
                     self.update_result(f"Goodbye, {name}! Door locked.", color="green")
                     self.speak(f"Goodbye {name}. The door is locked.")
                     self.play_welcome_song()  # Play the song when the door is locked
+
+                    # # Update door status to 'close' using the API
+                    # self.update_door_status(fingerprint_id, 'close')
 
                 time.sleep(3)
 
