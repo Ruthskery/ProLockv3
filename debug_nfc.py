@@ -1055,11 +1055,22 @@ class AttendanceApp:
     def auto_scan_fingerprint(self):
         failed_attempts = 0  # Initialize the counter for failed attempts
         cooldown_period = 120  # 2 minutes cooldown in seconds
+        last_time_in_global = None  # Track the time of the last time-in for any fingerprint
 
         while self.running:
-            if not self.finger:
-                return
+            current_time = datetime.now()
 
+            # Check if a cooldown is in effect globally after any time-in
+            if last_time_in_global:
+                elapsed_time_global = (current_time - last_time_in_global).total_seconds()
+
+                if elapsed_time_global < cooldown_period:
+                    remaining_time = int(cooldown_period - elapsed_time_global)
+                    self.update_result(f"Please wait {remaining_time} seconds before scanning again.", color="red")
+                    time.sleep(1)
+                    continue  # Skip further processing until the global cooldown period is over
+
+            # Start scanning for fingerprints
             self.update_result("Waiting for fingerprint image...", color="green")
             self.speak("Waiting for fingerprint")  # Announce that the system is waiting for a fingerprint
 
@@ -1078,7 +1089,6 @@ class AttendanceApp:
 
             # Search for fingerprint match and get the fingerprint ID
             if self.finger.finger_search() != adafruit_fingerprint.OK:
-                # If fingerprint search fails, no match is found
                 self.update_result("No matching fingerprint found.", color="red")
                 self.play_wrong_song()  # Play the song when the door is unlocked
                 self.speak("No matching fingerprint found. Please try again.")
@@ -1094,21 +1104,6 @@ class AttendanceApp:
             fingerprint_id = self.finger.finger_id
             print(f"Fingerprint ID detected: {fingerprint_id}")
 
-            # Now that fingerprint_id is assigned, we can check if the cooldown applies
-            current_time = datetime.now()
-
-            # Check if the last time-in was less than 2 minutes ago
-            if fingerprint_id in self.last_time_in:
-                last_scan_time = self.last_time_in[fingerprint_id]
-                elapsed_time = (current_time - last_scan_time).total_seconds()
-
-                if elapsed_time < cooldown_period:
-                    self.update_result(
-                        f"Please wait {int(cooldown_period - elapsed_time)} seconds before scanning again.",
-                        color="red")
-                    time.sleep(1)
-                    continue  # Skip further processing until cooldown period is over
-
             # Fetch user details from the database
             name = self.get_user_details(fingerprint_id)
 
@@ -1121,29 +1116,25 @@ class AttendanceApp:
 
             print(f"User {name} found in the database.")
 
-            # Determine if we should skip the schedule check and time-in/time-out for superusers
+            # Check if this is a superuser who can skip time-in/time-out
             is_superuser = fingerprint_id in [1, 2]
 
             if is_superuser:
-                print("Superuser detected. Bypassing time-in/time-out process but allowing door control.")
-
                 if self.is_manual_unlock:
-                   # self.lock_door()
                     self.update_door_status(fingerprint_id, 'close')
                     self.is_manual_unlock = False
                     self.update_result(f"Goodbye, {name}! Door locked.", color="green")
                     self.speak(f"Goodbye {name}. The door is locked.")
                     self.play_welcome_song()  # Play the song when the door is locked
                 else:
-#                   self.unlock_door()
                     self.update_door_status(fingerprint_id, 'open')
                     self.is_manual_unlock = True
                     self.update_result(f"Welcome, {name}! Door unlocked.", color="green")
                     self.speak(f"Welcome {name}. The door is unlocked.")
                     self.play_welcome_song()  # Play the song when the door is unlocked
+
             else:
-                print(
-                    f"Fingerprint belongs to ordinary user with ID: {fingerprint_id}. Proceeding with schedule check...")
+                # Regular user schedule and time-in/out process
                 is_makeup_class = self.check_if_makeup_class(fingerprint_id)
 
                 if is_makeup_class:
@@ -1158,18 +1149,13 @@ class AttendanceApp:
                     time.sleep(3)
                     continue
 
-                current_time_data = self.fetch_current_date_time()
-                if not current_time_data:
-                    return
-                current_time = datetime.strptime(current_time_data['current_time'], "%H:%M")
-
                 # Proceed with time-in or time-out logic based on the user
                 if not self.check_time_in_record_fingerprint(fingerprint_id):
                     self.record_time_in_fingerprint(fingerprint_id, name)
                     self.update_door_status(fingerprint_id, 'open')
 
-                    # Log the current time for cooldown tracking
-                    self.last_time_in[fingerprint_id] = current_time
+                    # Log the current time for global cooldown tracking
+                    last_time_in_global = current_time  # Set global time-in cooldown
 
                     self.update_result(f"Welcome, {name}! Door unlocked.", color="green")
                     self.speak(f"Welcome {name}. The door is unlocked.")
@@ -1179,13 +1165,12 @@ class AttendanceApp:
                     self.record_time_out_fingerprint(fingerprint_id)
                     self.update_door_status(fingerprint_id, 'close')
 
-                    self.last_time_in.pop(fingerprint_id, None)  # Remove cooldown tracking for time-out
-
                     self.update_result(f"Goodbye, {name}! Door locked.", color="green")
                     self.speak(f"Goodbye {name}. The door is locked.")
                     self.play_welcome_song()  # Play the song when the door is locked
 
-                time.sleep(3)
+            time.sleep(3)
+
 
     def check_if_makeup_class(self, fingerprint_id):
         # Replace with your logic to determine if this is a make-up class or not
