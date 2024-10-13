@@ -1054,10 +1054,25 @@ class AttendanceApp:
 
     def auto_scan_fingerprint(self):
         failed_attempts = 0  # Initialize the counter for failed attempts
+        cooldown_period = 120  # 2 minutes cooldown in seconds
 
         while self.running:
             if not self.finger:
                 return
+
+            current_time = datetime.now()
+
+            # Check if the last time-in was less than 2 minutes ago
+            if fingerprint_id in self.last_time_in:
+                last_scan_time = self.last_time_in[fingerprint_id]
+                elapsed_time = (current_time - last_scan_time).total_seconds()
+
+                if elapsed_time < cooldown_period:
+                    self.update_result(
+                        f"Please wait {int(cooldown_period - elapsed_time)} seconds before scanning again.",
+                        color="red")
+                    time.sleep(1)
+                    continue  # Skip further processing until cooldown period is over
 
             self.update_result("Waiting for fingerprint image...", color="green")
             self.speak("Waiting for fingerprint")  # Announce that the system is waiting for a fingerprint
@@ -1147,35 +1162,27 @@ class AttendanceApp:
                     return
                 current_time = datetime.strptime(current_time_data['current_time'], "%H:%M")
 
+                # Proceed with time-in or time-out logic based on the user
                 if not self.check_time_in_record_fingerprint(fingerprint_id):
                     self.record_time_in_fingerprint(fingerprint_id, name)
-                    # self.unlock_door()
-
-                    # Update door status to 'open' using the API
                     self.update_door_status(fingerprint_id, 'open')
 
-                    self.is_manual_unlock = True
+                    # Log the current time for cooldown tracking
                     self.last_time_in[fingerprint_id] = current_time
+
                     self.update_result(f"Welcome, {name}! Door unlocked.", color="green")
                     self.speak(f"Welcome {name}. The door is unlocked.")
                     self.play_welcome_song()  # Play the song when the door is unlocked
 
-                    # # Update door status to 'open' using the API
-                    # self.update_door_status(fingerprint_id, 'open')
                 else:
                     self.record_time_out_fingerprint(fingerprint_id)
-                    # self.lock_door()
-
-                    # Update door status to 'close' using the API
                     self.update_door_status(fingerprint_id, 'close')
-                    self.is_manual_unlock = False
-                    self.record_all_time_out()
+
+                    self.last_time_in.pop(fingerprint_id, None)  # Remove cooldown tracking for time-out
+
                     self.update_result(f"Goodbye, {name}! Door locked.", color="green")
                     self.speak(f"Goodbye {name}. The door is locked.")
                     self.play_welcome_song()  # Play the song when the door is locked
-
-                    # # Update door status to 'close' using the API
-                    # self.update_door_status(fingerprint_id, 'close')
 
                 time.sleep(3)
 
