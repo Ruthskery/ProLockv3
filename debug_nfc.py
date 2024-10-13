@@ -1060,20 +1060,6 @@ class AttendanceApp:
             if not self.finger:
                 return
 
-            current_time = datetime.now()
-
-            # Check if the last time-in was less than 2 minutes ago
-            if fingerprint_id in self.last_time_in:
-                last_scan_time = self.last_time_in[fingerprint_id]
-                elapsed_time = (current_time - last_scan_time).total_seconds()
-
-                if elapsed_time < cooldown_period:
-                    self.update_result(
-                        f"Please wait {int(cooldown_period - elapsed_time)} seconds before scanning again.",
-                        color="red")
-                    time.sleep(1)
-                    continue  # Skip further processing until cooldown period is over
-
             self.update_result("Waiting for fingerprint image...", color="green")
             self.speak("Waiting for fingerprint")  # Announce that the system is waiting for a fingerprint
 
@@ -1107,6 +1093,21 @@ class AttendanceApp:
             # Get the fingerprint ID after a successful match
             fingerprint_id = self.finger.finger_id
             print(f"Fingerprint ID detected: {fingerprint_id}")
+
+            # Now that fingerprint_id is assigned, we can check if the cooldown applies
+            current_time = datetime.now()
+
+            # Check if the last time-in was less than 2 minutes ago
+            if fingerprint_id in self.last_time_in:
+                last_scan_time = self.last_time_in[fingerprint_id]
+                elapsed_time = (current_time - last_scan_time).total_seconds()
+
+                if elapsed_time < cooldown_period:
+                    self.update_result(
+                        f"Please wait {int(cooldown_period - elapsed_time)} seconds before scanning again.",
+                        color="red")
+                    time.sleep(1)
+                    continue  # Skip further processing until cooldown period is over
 
             # Fetch user details from the database
             name = self.get_user_details(fingerprint_id)
@@ -1435,14 +1436,3 @@ center_window(root, 1200, 800)
 
 # Run the application
 root.mainloop()
-
-Exception in thread Thread-2 (auto_scan_fingerprint):
-Traceback (most recent call last):
-  File "/usr/lib/python3.11/threading.py", line 1038, in _bootstrap_inner
-    self.run()
-  File "/usr/lib/python3.11/threading.py", line 975, in run
-    self._target(*self._args, **self._kwargs)
-  File "/home/miko/Downloads/prolockv2/Localmuna/finaltest.py", line 1066, in auto_scan_fingerprint
-    if fingerprint_id in self.last_time_in:
-       ^^^^^^^^^^^^^^
-UnboundLocalError: cannot access local variable 'fingerprint_id' where it is not associated with a value
