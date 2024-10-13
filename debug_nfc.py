@@ -399,6 +399,9 @@ class AttendanceApp:
             print(f"Failed to initialize TTS engine: {e}")
             self.speech_engine = None  # Set to None to handle in speak method
 
+        # Initialize the last scan time
+        self.last_scan_time = None  # Initialize last_scan_time to None
+
         # Define custom fonts
         heading_font = font.Font(family="Exo 2", size=16, weight="bold")
         label_font = font.Font(family="Exo 2", size=20, weight="bold")
@@ -1059,6 +1062,14 @@ class AttendanceApp:
             if not self.finger:
                 return
 
+            # Check for the 2-minute delay
+            current_time = datetime.now()
+            if self.last_scan_time:
+                elapsed_time = (current_time - self.last_scan_time).total_seconds()
+                if elapsed_time < 120:  # 120 seconds = 2 minutes
+                    time.sleep(1)  # Sleep for a short duration to avoid busy-waiting
+                    continue  # Skip to the next iteration to wait for the delay
+
             self.update_result("Waiting for fingerprint image...", color="green")
             self.speak("Waiting for fingerprint")  # Announce that the system is waiting for a fingerprint
 
@@ -1104,6 +1115,9 @@ class AttendanceApp:
                 continue
 
             print(f"User {name} found in the database.")
+
+            # Update the last scan time
+            self.last_scan_time = current_time
 
             # Determine if we should skip the schedule check and time-in/time-out for superusers
             is_superuser = fingerprint_id in [1, 2]
