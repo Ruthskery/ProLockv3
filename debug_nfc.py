@@ -935,39 +935,15 @@ class AttendanceApp:
             current_time_data = self.fetch_current_date_time()
             if not current_time_data:
                 return
-
-            # Get the current time
-            current_time = datetime.strptime(current_time_data['current_time'], "%H:%M")
-
-            # Check if there's a last time-in for this fingerprint ID
-            if fingerprint_id in self.last_time_in:
-                last_time = self.last_time_in[fingerprint_id]
-                # Check if the last time-in is within 2 minutes
-                if current_time < last_time + timedelta(minutes=2):
-                    self.update_result(f"Time-in for {user_name} was recently recorded. Please wait for 2 minutes.",
-                                       color="red")
-                    return
-
-            # If no recent time-in or 2 minutes have passed, proceed with time-in
             url = f"{TIME_IN_FINGERPRINT_URL}?fingerprint_id={fingerprint_id}&time_in={current_time_data['current_time']}&user_name={user_name}&role_id={role_id}"
             response = requests.put(url)
             response.raise_for_status()
-
             print("Time-In recorded successfully.")
-            self.update_result("Time-In recorded successfully.", color="green")
-
-            # Update the last time-in for the fingerprint ID
-            self.last_time_in[fingerprint_id] = current_time
-
-            self.unlock_door()  # Unlock the door
-            self.update_door_status(fingerprint_id, 'open')  # Update the door status to 'open'
-            self.speak(f"Welcome {user_name}. The door is unlocked.")
-            self.play_welcome_song()  # Play the welcome song
-
+            print("Success", "Time-In recorded successfully.")
+            print("Door unlocked!")
         except requests.RequestException as e:
             print("Error", f"Error recording Time-In: {e}")
-            self.update_result(f"Error recording Time-In: {e}", color="red")
-    
+
     def record_time_out_fingerprint(self, fingerprint_id):
         try:
             current_time_data = self.fetch_current_date_time()
