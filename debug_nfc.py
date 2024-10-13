@@ -1435,3 +1435,14 @@ center_window(root, 1200, 800)
 
 # Run the application
 root.mainloop()
+
+Exception in thread Thread-2 (auto_scan_fingerprint):
+Traceback (most recent call last):
+  File "/usr/lib/python3.11/threading.py", line 1038, in _bootstrap_inner
+    self.run()
+  File "/usr/lib/python3.11/threading.py", line 975, in run
+    self._target(*self._args, **self._kwargs)
+  File "/home/miko/Downloads/prolockv2/Localmuna/finaltest.py", line 1066, in auto_scan_fingerprint
+    if fingerprint_id in self.last_time_in:
+       ^^^^^^^^^^^^^^
+UnboundLocalError: cannot access local variable 'fingerprint_id' where it is not associated with a value
